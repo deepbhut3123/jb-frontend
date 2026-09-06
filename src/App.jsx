@@ -6,6 +6,7 @@ import ProductsPage from './pages/ProductsPage.jsx';
 import CategoriesPage from './pages/CategoriesPage.jsx';
 import QuotationsPage from './pages/QuotationsPage.jsx';
 import UsersPage from './pages/UsersPage.jsx';
+import WhatsAppPage from './pages/WhatsAppPage.jsx';
 import { getSession } from './services/api.js';
 import { navigate } from './utils/navigation.js';
 
@@ -16,6 +17,7 @@ const protectedRoutes = {
   '/products': { page: ProductsPage, adminOnly: true },
   '/categories': { page: CategoriesPage, adminOnly: true },
   '/quotations': { page: QuotationsPage },
+  '/whatsapp': { page: WhatsAppPage, adminOnly: true },
 };
 
 function currentPath() { return window.location.pathname.replace(/\/$/, '') || '/'; }
