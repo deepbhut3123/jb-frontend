@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { Edit3, Plus, Search, ShieldCheck, Trash2, UserRound, X } from "lucide-react";
 import { api } from "../../../services/api.js";
@@ -8,6 +8,8 @@ import { formatDisplayDate } from "../CrmUtils.jsx";
 function UsersPanel({ users, setUsers, token }) {
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState({
     name: "",
@@ -33,6 +35,11 @@ function UsersPanel({ users, setUsers, token }) {
       }),
     [search, tab, users],
   );
+  useEffect(() => {
+    api.users(token, { page, limit: 10, role: tab === "all" ? undefined : tab, search: search.trim() })
+      .then((response) => { setUsers(response.users || []); setPagination(response.pagination || { total: response.users?.length || 0, totalPages: 1 }); })
+      .catch((error) => toast.error(error.message));
+  }, [page, search, setUsers, tab, token]);
   function openCreate() {
     setForm({ name: "", email: "", phone: "", password: "", role: 2 });
     setDialog({ mode: "create" });
@@ -100,14 +107,14 @@ function UsersPanel({ users, setUsers, token }) {
           <button
             className={tab === "all" ? "active" : ""}
             type="button"
-            onClick={() => setTab("all")}
+            onClick={() => { setTab("all"); setPage(1); }}
           >
             All accounts
           </button>
           <button
             className={tab === "users" ? "active" : ""}
             type="button"
-            onClick={() => setTab("users")}
+            onClick={() => { setTab("users"); setPage(1); }}
           >
             <UserRound size={15} />
             Users
@@ -115,7 +122,7 @@ function UsersPanel({ users, setUsers, token }) {
           <button
             className={tab === "admins" ? "active" : ""}
             type="button"
-            onClick={() => setTab("admins")}
+            onClick={() => { setTab("admins"); setPage(1); }}
           >
             <ShieldCheck size={15} />
             Admins
@@ -125,11 +132,12 @@ function UsersPanel({ users, setUsers, token }) {
           <Search size={16} />
           <input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
             placeholder="Search by name or email"
           />
         </label>
       </div>
+      <div className="lead-pagination"><span>{pagination.total || 0} account{pagination.total === 1 ? "" : "s"}</span><div><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</button><strong>Page {page} of {pagination.totalPages || 1}</strong><button type="button" disabled={page >= (pagination.totalPages || 1)} onClick={() => setPage((current) => current + 1)}>Next</button></div></div>
       <div className="users-table-wrap">
         <table className="users-table">
           <thead>

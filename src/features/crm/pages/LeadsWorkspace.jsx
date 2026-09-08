@@ -3,11 +3,12 @@ import { DatePicker, Select } from "antd";
 import dayjs from "dayjs";
 import { createRoot } from "react-dom/client";
 import { toast } from "react-toastify";
-import { Edit3, Mic, MicOff, Plus, Search, Trash2, X } from "lucide-react";
+import { Edit3, FilePlus2, Mic, MicOff, Plus, Search, Trash2, X } from "lucide-react";
 import indiaLocations from "../../../data/indiaLocations.json";
 import { api } from "../../../services/api.js";
 import { AntDatePicker, AssigneeDropdown, LeadDropdown, PhoneLink } from "../CrmControls.jsx";
 import { formatDisplayDate } from "../CrmUtils.jsx";
+import { navigate } from "../../../utils/navigation.js";
 
 function cleanupLeadTableEnhancements() {
   window.dispatchEvent(new Event("jb:lead-table-update-start"));
@@ -54,7 +55,7 @@ function LeadOptionManager({ type, label, options, token, onClose, onChanged }) 
 function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadOptions, setLeadOptions }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
-  const [dateRange, setDateRange] = useState("all");
+  const [dateRange, setDateRange] = useState("month");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const [dialog, setDialog] = useState(null);
@@ -106,9 +107,19 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
   useEffect(() => {
     const params = { page, limit: 10, status: status === "All" ? undefined : status, search: search.trim() };
     if (dateRange !== "all") {
-      const end = dayjs().add(1, "day");
-      params.dateTo = end.format("YYYY-MM-DD");
-      params.dateFrom = (dateRange === "today" ? dayjs() : dayjs().subtract(Number(dateRange) - 1, "day")).format("YYYY-MM-DD");
+      if (dateRange === "month") {
+        params.dateFrom = dayjs().startOf("month").format("YYYY-MM-DD");
+        params.dateTo = dayjs().add(1, "month").startOf("month").format("YYYY-MM-DD");
+      } else if (dateRange === "lastMonth") {
+        params.dateFrom = dayjs().subtract(1, "month").startOf("month").format("YYYY-MM-DD");
+        params.dateTo = dayjs().startOf("month").format("YYYY-MM-DD");
+      } else if (dateRange === "lastYear") {
+        params.dateFrom = dayjs().subtract(1, "year").startOf("year").format("YYYY-MM-DD");
+        params.dateTo = dayjs().startOf("year").format("YYYY-MM-DD");
+      } else {
+        params.dateTo = dayjs().add(1, "day").format("YYYY-MM-DD");
+        params.dateFrom = (dateRange === "today" ? dayjs() : dayjs().subtract(Number(dateRange) - 1, "day")).format("YYYY-MM-DD");
+      }
     }
     let active = true;
     api.leads(token, params)
@@ -520,7 +531,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               setDateRange(value);
               setPage(1);
             }}
-            options={[{ value: "all", label: "All time" }, { value: "today", label: "Today" }, { value: "7", label: "Last 7 days" }, { value: "30", label: "Last 30 days" }]}
+            options={[{ value: "month", label: "Current month" }, { value: "lastMonth", label: "Last month" }, { value: "lastYear", label: "Last year" }, { value: "today", label: "Today" }, { value: "7", label: "Last 7 days" }, { value: "30", label: "Last 30 days" }, { value: "all", label: "All time" }]}
           />
         </label>
       </div>
@@ -613,6 +624,14 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
                       className="table-actions"
                       onClick={(event) => event.stopPropagation()}
                     >
+                      <button
+                        className="icon-action quotation"
+                        type="button"
+                        title="Create quotation for this lead"
+                        onClick={() => navigate(`/quotations?leadId=${lead._id}&create=1`)}
+                      >
+                        <FilePlus2 size={16} />
+                      </button>
                       <button
                         className="icon-action edit"
                         type="button"

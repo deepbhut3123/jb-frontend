@@ -33,7 +33,7 @@ export const api = {
   verifyResetOtp: (body) => request('/api/auth/forgot-password/verify-otp', { method: 'POST', body: JSON.stringify(body) }),
   resetPassword: (body) => request('/api/auth/forgot-password/reset', { method: 'POST', body: JSON.stringify(body) }),
   dashboard: (token) => request('/api/dashboard/summary', { headers: { Authorization: `Bearer ${token}` } }),
-  users: (token) => request('/api/users', { headers: { Authorization: `Bearer ${token}` } }),
+  users: (token, params = {}) => { const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString(); return request(`/api/users${query ? `?${query}` : ''}`, { headers: { Authorization: `Bearer ${token}` } }); },
   leads: (token, params = {}) => {
     const query = new URLSearchParams(
       Object.entries(params).filter(([, value]) => value !== undefined && value !== ''),
@@ -54,7 +54,7 @@ export const api = {
   createUser: (token, body) => request('/api/users', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateUser: (token, id, body) => request(`/api/users/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   deleteUser: (token, id) => request(`/api/users/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }),
-  products: (token) => request('/api/products', { headers: { Authorization: `Bearer ${token}` } }),
+  products: (token, params = {}) => { const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString(); return request(`/api/products${query ? `?${query}` : ''}`, { headers: { Authorization: `Bearer ${token}` } }); },
   categories: (token) => request('/api/categories', { headers: { Authorization: `Bearer ${token}` } }),
   createCategory: (token, body) => request('/api/categories', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateCategory: (token, id, body) => request(`/api/categories/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
@@ -62,7 +62,10 @@ export const api = {
   createSubCategory: (token, categoryId, body) => request(`/api/categories/${categoryId}/subcategories`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateSubCategory: (token, categoryId, subCategoryId, body) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   deleteSubCategory: (token, categoryId, subCategoryId) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }),
-  quotations: (token) => request('/api/quotations', { headers: { Authorization: `Bearer ${token}` } }),
+  quotations: (token, params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
+    return request(`/api/quotations${query ? `?${query}` : ''}`, { headers: { Authorization: `Bearer ${token}` } });
+  },
   createQuotation: (token, body) => request('/api/quotations', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateQuotation: (token, id, body) => request(`/api/quotations/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateQuotationStatus: (token, id, status) => request(`/api/quotations/${id}/status`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }),

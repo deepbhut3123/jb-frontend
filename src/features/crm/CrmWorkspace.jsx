@@ -42,7 +42,7 @@ function CrmWorkspace({ section = 'dashboard' }) {
   }, [session.token]);
   useEffect(() => {
     if (!['users', 'leads'].includes(section) || !isAdmin) return;
-    api.users(session.token).then((response) => setUsers(response.users || [])).catch((error) => toast.error(error.message));
+    api.users(session.token, section === 'leads' ? { limit: 100 } : { page: 1, limit: 10 }).then((response) => setUsers(response.users || [])).catch((error) => toast.error(error.message));
   }, [isAdmin, section, session.token]);
   useEffect(() => {
     if (!['products', 'categories'].includes(section)) return;
@@ -54,11 +54,11 @@ function CrmWorkspace({ section = 'dashboard' }) {
   }, [section, session.token]);
   useEffect(() => {
     if (section !== 'quotations') return;
-    api.quotations(session.token).then((response) => setQuotations(response.quotations || [])).catch((error) => toast.error(error.message));
+    api.leads(session.token, { limit: 100 }).then((response) => setLeads(response.leads || [])).catch((error) => toast.error(error.message));
   }, [section, session.token]);
   useEffect(() => {
     if (!['products', 'quotations'].includes(section)) return;
-    api.products(session.token).then((response) => setProducts(response.products || [])).catch((error) => toast.error(error.message));
+    api.products(session.token, section === 'quotations' ? { limit: 1000 } : { page: 1, limit: 10 }).then((response) => setProducts(response.products || [])).catch((error) => toast.error(error.message));
   }, [isAdmin, section, session.token]);
 
   function logout() { clearSession(); toast.success('You have been signed out.'); navigate('/login'); }
@@ -76,7 +76,7 @@ function CrmWorkspace({ section = 'dashboard' }) {
           : section === 'leads' ? <LeadsPanel leads={leads} setLeads={setLeads} isAdmin={isAdmin} users={users} token={session.token} currentUser={session.user} leadOptions={leadOptions} setLeadOptions={setLeadOptions} />
             : section === 'products' ? <ProductMasterPanel products={products} setProducts={setProducts} categories={categories} token={session.token} />
               : section === 'categories' ? <CategoryMasterPanel categories={categories} setCategories={setCategories} token={session.token} />
-                : section === 'quotations' ? <QuotationsPanel quotations={quotations} setQuotations={setQuotations} token={session.token} isAdmin={isAdmin} products={products} />
+                : section === 'quotations' ? <QuotationsPanel quotations={quotations} setQuotations={setQuotations} leads={leads} token={session.token} isAdmin={isAdmin} products={products} />
                   : <DashboardOverview data={data} session={session} />}
         </ModuleLoading>
       </div>
