@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { getPendingRequests, subscribeToRequests } from '../services/requestLoading.js';
 
+const loadingHoldMs = 500;
 const moduleRequests = {
   whatsapp: ['api/whatsapp/settings', 'api/users', 'api/lead-options'],
   dashboard: ['api/leads'],
@@ -18,6 +19,10 @@ function SkeletonBlock({ className = '' }) {
 function ModuleSkeleton({ section }) {
   return <div className="module-skeleton" role="status" aria-live="polite">
     <span className="loading-sr-only">Loading {section}…</span>
+    <div className="module-loading-indicator">
+      <span className="module-loading-spinner" aria-hidden="true" />
+      <span>Loading data…</span>
+    </div>
     <div aria-hidden="true">
       <div className="skeleton-heading"><div><SkeletonBlock className="skeleton-title" /><SkeletonBlock className="skeleton-subtitle" /></div><SkeletonBlock className="skeleton-button" /></div>
       {section === 'dashboard' ? <>
@@ -31,13 +36,23 @@ function ModuleSkeleton({ section }) {
 
 export default function ModuleLoading({ section, token, children }) {
   const requests = useSyncExternalStore(subscribeToRequests, getPendingRequests);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
   const paths = moduleRequests[section] || [];
-  const loading = !mounted || requests.some((request) =>
+  const backendLoading = requests.some((request) =>
     request.authorization === `Bearer ${token}` &&
     (request.path === 'api/dashboard/summary' || paths.includes(request.path)),
   );
+  const [showLoading, setShowLoading] = useState(true);
+
+  useEffect(() => {
+    if (backendLoading) {
+      setShowLoading(true);
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setShowLoading(false), loadingHoldMs);
+    return () => window.clearTimeout(timeout);
+  }, [backendLoading]);
+
+  const loading = backendLoading || showLoading;
 
   // Keep panels mounted so their fetches, filters, and open forms survive loading.
   return <div className={`module-loading${loading ? ' is-loading' : ''}`} aria-busy={loading}>
