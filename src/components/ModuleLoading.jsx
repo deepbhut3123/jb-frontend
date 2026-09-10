@@ -2,13 +2,13 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { getPendingRequests, subscribeToRequests } from '../services/requestLoading.js';
 
 const moduleRequests = {
-  whatsapp: ['/api/whatsapp/settings', '/api/users', '/api/lead-options'],
-  dashboard: ['/api/leads'],
-  leads: ['/api/leads', '/api/users', '/api/lead-options'],
-  users: ['/api/users'],
-  products: ['/api/products', '/api/categories'],
-  categories: ['/api/categories'],
-  quotations: ['/api/quotations', '/api/products'],
+  whatsapp: ['api/whatsapp/settings', 'api/users', 'api/lead-options'],
+  dashboard: ['api/leads'],
+  leads: ['api/leads', 'api/users', 'api/lead-options'],
+  users: ['api/users'],
+  products: ['api/products', 'api/categories'],
+  categories: ['api/categories'],
+  quotations: ['api/quotations', 'api/products'],
 };
 
 function SkeletonBlock({ className = '' }) {
@@ -36,7 +36,7 @@ export default function ModuleLoading({ section, token, children }) {
   const paths = moduleRequests[section] || [];
   const loading = !mounted || requests.some((request) =>
     request.authorization === `Bearer ${token}` &&
-    (request.path === '/api/dashboard/summary' || paths.includes(request.path)),
+    (request.path === 'api/dashboard/summary' || paths.includes(request.path)),
   );
 
   // Keep panels mounted so their fetches, filters, and open forms survive loading.
