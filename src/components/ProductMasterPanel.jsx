@@ -7,7 +7,10 @@ import { API_URL, api } from '../services/api.js';
 const emptyProduct = { partCode: '', description: '', hsnCode: '', brand: '', category: '', subCategory: '', image: '', taxRate: 18, mrp: '', isActive: true };
 const taxOptions = [0, 5, 12, 18, 28].map((value) => ({ value, label: `${value}% GST` }));
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
-function productImageUrl(image) { return image?.startsWith('http') ? image : `${API_URL}${image}`; }
+function productImageUrl(image) {
+  if (!image) return '';
+  return image.startsWith('http') ? image : `${API_URL}${image.replace(/^\/+/, '')}`;
+}
 
 function ProductSelect({ value, options, onChange, placeholder, disabled = false }) {
   return <Select className="antd-crm-select product-form-select" showSearch optionFilterProp="label" value={value || undefined} options={options} onChange={onChange} placeholder={placeholder} disabled={disabled} />;
@@ -28,7 +31,7 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     api.products(token, params).then((response) => { setProducts(response.products || []); setPagination(response.pagination || { page, total: response.products?.length || 0, totalPages: 1 }); }).catch((error) => toast.error(error.message));
   }, [page, search, setProducts, status, token]);
   useEffect(() => {
-    if (!imageFile) { setImagePreview(form.image ? `${API_URL}${form.image}` : ''); return undefined; }
+    if (!imageFile) { setImagePreview(productImageUrl(form.image)); return undefined; }
     const previewUrl = URL.createObjectURL(imageFile);
     setImagePreview(previewUrl);
     return () => URL.revokeObjectURL(previewUrl);

@@ -1,14 +1,16 @@
 import { trackDataRequest } from './requestLoading.js';
 
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const configuredApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+export const API_URL = `${configuredApiUrl.replace(/\/+$/, '')}/`;
 
 async function request(path, options = {}) {
-  const finishLoading = (options.method || 'GET') === 'GET' && !path.startsWith('/api/auth/')
-    ? trackDataRequest(path, options.headers?.Authorization)
+  const apiPath = path.replace(/^\/+/, '');
+  const finishLoading = (options.method || 'GET') === 'GET' && !apiPath.startsWith('api/auth/')
+    ? trackDataRequest(apiPath, options.headers?.Authorization)
     : null;
   try {
     const isMultipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
-    const response = await fetch(`${API_URL}${path}`, { cache: 'no-store', ...options, headers: { ...(isMultipart ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) } });
+    const response = await fetch(`${API_URL}${apiPath}`, { cache: 'no-store', ...options, headers: { ...(isMultipart ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) } });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Request failed.');
     return data;
