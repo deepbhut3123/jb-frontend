@@ -10,7 +10,8 @@ async function request(path, options = {}) {
     : null;
   try {
     const isMultipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
-    const response = await fetch(`${API_URL}${apiPath}`, { cache: 'no-store', ...options, headers: { ...(isMultipart ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) } });
+    const requestUrl = new URL(apiPath, API_URL).toString();
+    const response = await fetch(requestUrl, { cache: 'no-store', ...options, headers: { ...(isMultipart ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) } });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Request failed.');
     return data;
