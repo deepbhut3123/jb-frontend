@@ -732,6 +732,9 @@ h1 em { color: #d36517; font-style: normal; }
 .leads-table .assignee-avatar { width: 23px; height: 23px; border-radius: 6px; font-size: .64rem; }
 .lead-name-button { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: #29264f; cursor: pointer; text-align: left; }
 .lead-name-button > span { display: none; }
+.lead-name-button > .lead-company-customer { display: grid; gap: 4px; }
+.lead-company-customer strong { color: #29264f; font-size: .86rem; line-height: 1.25; }
+.lead-company-customer small { color: #9695a6; font-size: .7rem; font-weight: 500; line-height: 1.25; }
 .lead-name-button:hover strong { color: #392c98; text-decoration: underline; text-underline-offset: 3px; }
 .lead-details-modal { width: min(580px, 100%); padding: 28px; border: 1px solid rgba(255,255,255,.7); border-radius: 18px; background: #fff; box-shadow: 0 24px 60px rgba(30,27,75,.24); animation: modal-rise .24s cubic-bezier(.2,.8,.2,1); }
 .company-persons-field { display: grid; gap: 10px; }

@@ -484,7 +484,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
       <div className="section-heading">
         <div>
           <h1>Leads</h1>
-          <p>Click a lead name to view its complete details.</p>
+          <p>Click a company or customer name to view its complete details.</p>
         </div>
         <button className="primary-action" type="button" onClick={openCreate}>
           <Plus size={17} />
@@ -539,7 +539,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
         <table className="leads-table">
           <thead>
             <tr>
-              <th>Customer</th>
+              <th>Company / Customer</th>
               <th>City</th>
               <th>Contact</th>
               <th>Source</th>
@@ -566,8 +566,11 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
                         setDialog({ mode: "details", lead });
                       }}
                     >
-                      <span>{(lead.name || "?").slice(0, 1).toUpperCase()}</span>
-                      <strong>{lead.name}</strong>
+                      <span>{(lead.company || lead.name || "?").slice(0, 1).toUpperCase()}</span>
+                      <span className="lead-company-customer">
+                        <strong>{lead.company && lead.company !== "N/A" ? lead.company : "No company"}</strong>
+                        <small>{lead.name || "No customer name"}</small>
+                      </span>
                     </button>
                   </td>
                   <td>{lead.city || "N/A"}</td>
