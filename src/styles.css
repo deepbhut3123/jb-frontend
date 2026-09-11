@@ -125,6 +125,11 @@ h1 em { color: #d36517; font-style: normal; }
 .auth-form input:not([type="checkbox"]) { display: block; width: 100%; min-height: 47px; margin-top: 7px; padding: 0 14px; border: 1px solid #d8d8e3; border-radius: 9px; background: #fff; color: #29264f; font-size: .95rem; font-weight: 400; outline: none; }
 .auth-form input:not([type="checkbox"])::placeholder { color: #77768b; font-weight: 400; opacity: 1; }
 .auth-form input:not([type="checkbox"]):focus { border-color: #392c98; box-shadow: 0 0 0 4px rgba(57,44,152,.11); }
+.password-field { position: relative; margin-top: 7px; }
+.auth-form .password-field input:not([type="checkbox"]) { margin-top: 0; padding-right: 48px; }
+.password-visibility-toggle { position: absolute; top: 50%; right: 5px; display: inline-flex; width: 38px; height: 38px; align-items: center; justify-content: center; padding: 0; color: #68677c; background: transparent; border: 0; border-radius: 7px; cursor: pointer; transform: translateY(-50%); }
+.password-visibility-toggle:hover { color: #392c98; background: #f0eff9; }
+.password-visibility-toggle:focus-visible { color: #392c98; outline: 2px solid #392c98; outline-offset: 1px; }
 .form-options { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: 1px 0 4px; }
 .check-row { display: flex; align-items: center; gap: 8px; color: #68677c !important; font-size: .76rem !important; font-weight: 600 !important; }
 .check-row input { width: 15px; height: 15px; margin: 0; accent-color: #d36517; }
