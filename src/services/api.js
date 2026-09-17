@@ -64,6 +64,9 @@ export const api = {
   createSubCategory: (token, categoryId, body) => request(`/api/categories/${categoryId}/subcategories`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateSubCategory: (token, categoryId, subCategoryId, body) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   deleteSubCategory: (token, categoryId, subCategoryId) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }),
+  createSubSubCategory: (token, categoryId, subCategoryId, body) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}/subsubcategories`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
+  updateSubSubCategory: (token, categoryId, subCategoryId, subSubCategoryId, body) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}/subsubcategories/${subSubCategoryId}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
+  deleteSubSubCategory: (token, categoryId, subCategoryId, subSubCategoryId) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}/subsubcategories/${subSubCategoryId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }),
   quotations: (token, params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
     return request(`/api/quotations${query ? `?${query}` : ''}`, { headers: { Authorization: `Bearer ${token}` } });

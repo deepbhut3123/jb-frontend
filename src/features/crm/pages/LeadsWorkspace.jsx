@@ -710,6 +710,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               <label>
                 Name
                 <input
+                  className="lead-name-input"
                   value={form.name}
                   onChange={(event) =>
                     setForm({ ...form, name: event.target.value })
@@ -717,7 +718,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
                   placeholder="Enter customer name"
                 />
               </label>
-              <label>Company name<input value={form.company} onChange={(event) => setForm({ ...form, company: event.target.value })} placeholder="Company name" /></label>
+              <label>Company name<input className="lead-name-input" value={form.company} onChange={(event) => setForm({ ...form, company: event.target.value })} placeholder="Company name" /></label>
               <label>
                 Address 1
                 <input

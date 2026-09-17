@@ -13,6 +13,8 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
   const [categoryName, setCategoryName] = useState('');
   const [subCategoryDialog, setSubCategoryDialog] = useState(null);
   const [subCategoryNames, setSubCategoryNames] = useState(['']);
+  const [subSubCategoryDialog, setSubSubCategoryDialog] = useState(null);
+  const [subSubCategoryNames, setSubSubCategoryNames] = useState(['']);
   const [saving, setSaving] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState(new Set(categories.map((category) => category._id)));
   useEffect(() => {
@@ -24,12 +26,14 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
   }, [categories]);
   const visibleCategories = useMemo(() => categories.filter((category) => {
     const query = search.trim().toLowerCase();
-    return !query || category.name.toLowerCase().includes(query) || category.subCategories.some((item) => item.name.toLowerCase().includes(query));
+    return !query || category.name.toLowerCase().includes(query) || category.subCategories.some((item) => item.name.toLowerCase().includes(query) || (item.subSubCategories || []).some((child) => child.name.toLowerCase().includes(query)));
   }), [categories, search]);
   const subCategoryCount = categories.reduce((total, category) => total + category.subCategories.length, 0);
+  const subSubCategoryCount = categories.reduce((total, category) => total + category.subCategories.reduce((count, item) => count + (item.subSubCategories || []).length, 0), 0);
 
   function openCategory(mode, category = null) { setCategoryName(category?.name || ''); setDialog({ mode, category }); }
   function openSubCategoryDialog(category) { setSubCategoryNames(['']); setSubCategoryDialog(category); }
+  function openSubSubCategoryDialog(category, subCategory) { setSubSubCategoryNames(['']); setSubSubCategoryDialog({ category, subCategory }); }
   function updateCategoryState(updated) { setCategories((current) => current.map((category) => category._id === updated._id ? updated : category)); }
   function toggleCategory(categoryId) { setCollapsedCategories((current) => { const next = new Set(current); if (next.has(categoryId)) next.delete(categoryId); else next.add(categoryId); return next; }); }
   async function saveCategory(event) {
@@ -64,6 +68,33 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
   async function removeSubCategory(category, subCategory) {
     setDeleteDialog({ type: 'subCategory', category, subCategory });
   }
+  async function saveSubSubCategories(event) {
+    event.preventDefault();
+    const names = subSubCategoryNames.map((name) => name.trim()).filter(Boolean);
+    if (!names.length) { toast.error('Add at least one sub-sub category.'); return; }
+    setSaving(true);
+    try {
+      for (const name of names) {
+        const result = await api.createSubSubCategory(token, subSubCategoryDialog.category._id, subSubCategoryDialog.subCategory._id, { name });
+        updateCategoryState(result.category);
+      }
+      setSubSubCategoryDialog(null);
+      setSubSubCategoryNames(['']);
+      toast.success(`${names.length} sub-sub categor${names.length === 1 ? 'y' : 'ies'} added successfully.`);
+    } catch (error) { toast.error(error.message); } finally { setSaving(false); }
+  }
+  async function editSubSubCategory(category, subCategory, subSubCategory) {
+    const name = window.prompt('Enter sub-sub category name:', subSubCategory.name);
+    if (name === null || !name.trim()) return;
+    try {
+      const result = await api.updateSubSubCategory(token, category._id, subCategory._id, subSubCategory._id, { name });
+      updateCategoryState(result.category);
+      toast.success('Sub-sub category updated successfully.');
+    } catch (error) { toast.error(error.message); }
+  }
+  function removeSubSubCategory(category, subCategory, subSubCategory) {
+    setDeleteDialog({ type: 'subSubCategory', category, subCategory, subSubCategory });
+  }
   async function confirmDelete() {
     setSaving(true);
     try {
@@ -71,22 +102,38 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
         await api.deleteCategory(token, deleteDialog.category._id);
         setCategories((current) => current.filter((item) => item._id !== deleteDialog.category._id));
         toast.success('Category deleted successfully.');
-      } else {
+      } else if (deleteDialog.type === 'subCategory') {
         const result = await api.deleteSubCategory(token, deleteDialog.category._id, deleteDialog.subCategory._id);
         updateCategoryState(result.category);
         toast.success('Sub category deleted successfully.');
+      } else {
+        const result = await api.deleteSubSubCategory(token, deleteDialog.category._id, deleteDialog.subCategory._id, deleteDialog.subSubCategory._id);
+        updateCategoryState(result.category);
+        toast.success('Sub-sub category deleted successfully.');
       }
       setDeleteDialog(null);
     } catch (error) { toast.error(error.message); } finally { setSaving(false); }
   }
 
   return <div className="crm-content-inner category-master-page">
-    <div className="section-heading"><div><h1>Categories</h1><p>Organise products with a clear category and sub-category structure.</p></div><div className="category-heading-actions"><label className="user-search category-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search categories and sub categories" /></label><button className="primary-action" type="button" onClick={() => openCategory('create')}><Plus size={17} />Add category</button></div></div>
-    <div className="category-summary"><div><strong>{categories.length}</strong><span>Parent categories</span></div><div><strong>{subCategoryCount}</strong><span>Sub categories</span></div><div><strong>{categories.length ? Math.round(subCategoryCount / categories.length * 10) / 10 : 0}</strong><span>Average per category</span></div></div>
-    <div className="category-master-list">{visibleCategories.length ? visibleCategories.map((category) => { const isCollapsed = collapsedCategories.has(category._id); const iconIndex = categoryIconIndex(category); const CategoryIcon = categoryIcons[iconIndex]; return <section className={`category-master-card${isCollapsed ? ' collapsed' : ''}`} key={category._id}><div className="category-master-heading"><button className="category-master-toggle" type="button" aria-expanded={!isCollapsed} onClick={() => toggleCategory(category._id)}><ChevronDown className="category-expand-icon" size={17} /><span className={`category-master-icon category-icon-${iconIndex % 10}`}><CategoryIcon size={17} /></span><div className="category-master-title"><small>Parent category</small><strong>{category.name}</strong><span>{category.subCategories.length} sub categor{category.subCategories.length === 1 ? 'y' : 'ies'}</span></div></button><div className="table-actions"><button className="secondary-action category-add-sub-action" type="button" title="Add sub categories" onClick={() => openSubCategoryDialog(category)}><Plus size={14} />Add sub category</button><button className="icon-action edit" type="button" title="Edit category" aria-label={`Edit ${category.name}`} onClick={() => openCategory('edit', category)}><Edit3 size={16} /></button><button className="icon-action delete" type="button" title="Delete category" aria-label={`Delete ${category.name}`} onClick={() => removeCategory(category)}><Trash2 size={16} /></button></div></div>{!isCollapsed && <div className="sub-category-section"><div className="sub-category-section-heading"><strong>Sub categories</strong><span>Products in this category can be grouped here</span></div>{category.subCategories.length ? <div className="sub-category-list">{category.subCategories.map((subCategory) => <div className="sub-category-row" key={subCategory._id}><span>{subCategory.name}</span><div className="table-actions"><button className="icon-action edit" type="button" title="Edit sub category" aria-label={`Edit ${subCategory.name}`} onClick={() => editSubCategory(category, subCategory)}><Edit3 size={15} /></button><button className="icon-action delete" type="button" title="Delete sub category" aria-label={`Delete ${subCategory.name}`} onClick={() => removeSubCategory(category, subCategory)}><Trash2 size={15} /></button></div></div>)}</div> : <div className="sub-category-empty">No sub categories added yet. Use “Add sub category” above to add them.</div>}</div>}</section>; }) : <div className="empty-state-card"><FolderTree size={24} /><strong>No categories found</strong><span>Add a category to start building the product catalogue.</span></div>}</div>
+    <div className="section-heading"><div><h1>Categories</h1><p>Organise products with category, sub-category, and sub-sub-category groups.</p></div><div className="category-heading-actions"><label className="user-search category-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search all category levels" /></label><button className="primary-action" type="button" onClick={() => openCategory('create')}><Plus size={17} />Add category</button></div></div>
+    <div className="category-summary"><div><strong>{categories.length}</strong><span>Parent categories</span></div><div><strong>{subCategoryCount}</strong><span>Sub categories</span></div><div><strong>{subSubCategoryCount}</strong><span>Sub-sub categories</span></div></div>
+    <div className="category-master-list">{visibleCategories.length ? visibleCategories.map((category) => {
+      const isCollapsed = collapsedCategories.has(category._id);
+      const iconIndex = categoryIconIndex(category);
+      const CategoryIcon = categoryIcons[iconIndex];
+      return <section className={`category-master-card${isCollapsed ? ' collapsed' : ''}`} key={category._id}>
+        <div className="category-master-heading"><button className="category-master-toggle" type="button" aria-expanded={!isCollapsed} onClick={() => toggleCategory(category._id)}><ChevronDown className="category-expand-icon" size={17} /><span className={`category-master-icon category-icon-${iconIndex % 10}`}><CategoryIcon size={17} /></span><div className="category-master-title"><small>Parent category</small><strong>{category.name}</strong><span>{category.subCategories.length} sub categor{category.subCategories.length === 1 ? 'y' : 'ies'}</span></div></button><div className="table-actions"><button className="secondary-action category-add-sub-action" type="button" title="Add sub categories" onClick={() => openSubCategoryDialog(category)}><Plus size={14} />Add sub category</button><button className="icon-action edit" type="button" title="Edit category" aria-label={`Edit ${category.name}`} onClick={() => openCategory('edit', category)}><Edit3 size={16} /></button><button className="icon-action delete" type="button" title="Delete category" aria-label={`Delete ${category.name}`} onClick={() => removeCategory(category)}><Trash2 size={16} /></button></div></div>
+        {!isCollapsed && <div className="sub-category-section"><div className="sub-category-section-heading"><strong>Sub categories</strong><span>Group products down to three levels</span></div>{category.subCategories.length ? <div className="sub-category-list">{category.subCategories.map((subCategory) => <div className="sub-category-group" key={subCategory._id}>
+          <div className="sub-category-row"><span>{subCategory.name}</span><div className="table-actions"><button className="secondary-action category-add-sub-action" type="button" title={`Add sub-sub category under ${subCategory.name}`} onClick={() => openSubSubCategoryDialog(category, subCategory)}><Plus size={14} />Add sub-sub category</button><button className="icon-action edit" type="button" title="Edit sub category" aria-label={`Edit ${subCategory.name}`} onClick={() => editSubCategory(category, subCategory)}><Edit3 size={15} /></button><button className="icon-action delete" type="button" title="Delete sub category" aria-label={`Delete ${subCategory.name}`} onClick={() => removeSubCategory(category, subCategory)}><Trash2 size={15} /></button></div></div>
+          {(subCategory.subSubCategories || []).length > 0 && <div className="sub-sub-category-list">{subCategory.subSubCategories.map((subSubCategory) => <div className="sub-sub-category-row" key={subSubCategory._id}><span>{subSubCategory.name}</span><div className="table-actions"><button className="icon-action edit" type="button" title="Edit sub-sub category" aria-label={`Edit ${subSubCategory.name}`} onClick={() => editSubSubCategory(category, subCategory, subSubCategory)}><Edit3 size={15} /></button><button className="icon-action delete" type="button" title="Delete sub-sub category" aria-label={`Delete ${subSubCategory.name}`} onClick={() => removeSubSubCategory(category, subCategory, subSubCategory)}><Trash2 size={15} /></button></div></div>)}</div>}
+        </div>)}</div> : <div className="sub-category-empty">No sub categories added yet. Use “Add sub category” above to add them.</div>}</div>}
+      </section>;
+    }) : <div className="empty-state-card"><FolderTree size={24} /><strong>No categories found</strong><span>Add a category to start building the product catalogue.</span></div>}</div>
     {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}><form className="user-modal category-modal" onSubmit={saveCategory}><div className="modal-heading"><div><span className="dashboard-kicker">Product catalogue</span><h2>{dialog.mode === 'create' ? 'Add category' : 'Edit category'}</h2><p>{dialog.mode === 'create' ? 'Create a parent category for your products.' : 'Update the parent category name.'}</p></div><button className="modal-close" type="button" aria-label="Close" onClick={() => setDialog(null)}><X size={18} /></button></div><label>Category name *<input autoFocus required maxLength="80" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="Enter category name" /></label><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" disabled={saving} type="submit">{saving ? 'Saving…' : dialog.mode === 'create' ? 'Add category' : 'Save changes'}</button></div></form></div>}
     {subCategoryDialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSubCategoryDialog(null)}><form className="user-modal category-modal bulk-subcategory-modal" onSubmit={saveSubCategories}><div className="modal-heading"><div><span className="dashboard-kicker">{subCategoryDialog.name}</span><h2>Add sub categories</h2><p>Add one or more sub categories under this parent category.</p></div><button className="modal-close" type="button" aria-label="Close" onClick={() => setSubCategoryDialog(null)}><X size={18} /></button></div><div className="bulk-subcategory-fields">{subCategoryNames.map((name, index) => <div className="bulk-subcategory-row" key={`subcategory-${index}`}><span>{index + 1}</span><input autoFocus={index === 0} value={name} onChange={(event) => setSubCategoryNames((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Sub category ${index + 1}`} />{subCategoryNames.length > 1 && <button className="icon-action delete" type="button" title="Remove field" aria-label={`Remove sub category ${index + 1}`} onClick={() => setSubCategoryNames((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={15} /></button>}</div>)}</div><button className="secondary-action bulk-add-more" type="button" onClick={() => setSubCategoryNames((current) => [...current, ''])}><Plus size={15} />Add more</button><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setSubCategoryDialog(null)}>Cancel</button><button className="primary-action" disabled={saving} type="submit">{saving ? 'Saving…' : 'Add sub categories'}</button></div></form></div>}
-    {deleteDialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDeleteDialog(null)}><div className="confirm-modal"><div className="confirm-icon"><Trash2 size={20} /></div><h2>{deleteDialog.type === 'category' ? 'Delete this category?' : 'Delete this sub category?'}</h2><p>{deleteDialog.type === 'category' ? <>This will permanently remove <strong>{deleteDialog.category.name}</strong> and all of its sub-categories.</> : <>This will permanently remove <strong>{deleteDialog.subCategory.name}</strong> from <strong>{deleteDialog.category.name}</strong>.</>}</p><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDeleteDialog(null)}>Cancel</button><button className="danger-action" disabled={saving} type="button" onClick={confirmDelete}>{saving ? 'Deleting…' : 'Delete'}</button></div></div></div>}
+    {subSubCategoryDialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSubSubCategoryDialog(null)}><form className="user-modal category-modal bulk-subcategory-modal" onSubmit={saveSubSubCategories}><div className="modal-heading"><div><span className="dashboard-kicker">{subSubCategoryDialog.category.name} / {subSubCategoryDialog.subCategory.name}</span><h2>Add sub-sub categories</h2><p>Add one or more groups under this sub category.</p></div><button className="modal-close" type="button" aria-label="Close" onClick={() => setSubSubCategoryDialog(null)}><X size={18} /></button></div><div className="bulk-subcategory-fields">{subSubCategoryNames.map((name, index) => <div className="bulk-subcategory-row" key={`subsubcategory-${index}`}><span>{index + 1}</span><input autoFocus={index === 0} maxLength="80" value={name} onChange={(event) => setSubSubCategoryNames((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Sub-sub category ${index + 1}`} />{subSubCategoryNames.length > 1 && <button className="icon-action delete" type="button" title="Remove field" aria-label={`Remove sub-sub category ${index + 1}`} onClick={() => setSubSubCategoryNames((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={15} /></button>}</div>)}</div><button className="secondary-action bulk-add-more" type="button" onClick={() => setSubSubCategoryNames((current) => [...current, ''])}><Plus size={15} />Add more</button><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setSubSubCategoryDialog(null)}>Cancel</button><button className="primary-action" disabled={saving} type="submit">{saving ? 'Saving…' : 'Add sub-sub categories'}</button></div></form></div>}
+    {deleteDialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDeleteDialog(null)}><div className="confirm-modal"><div className="confirm-icon"><Trash2 size={20} /></div><h2>{deleteDialog.type === 'category' ? 'Delete this category?' : deleteDialog.type === 'subCategory' ? 'Delete this sub category?' : 'Delete this sub-sub category?'}</h2><p>{deleteDialog.type === 'category' ? <>This will permanently remove <strong>{deleteDialog.category.name}</strong> and all of its sub categories and sub-sub categories.</> : deleteDialog.type === 'subCategory' ? <>This will permanently remove <strong>{deleteDialog.subCategory.name}</strong> and its sub-sub categories from <strong>{deleteDialog.category.name}</strong>.</> : <>This will permanently remove <strong>{deleteDialog.subSubCategory.name}</strong> from <strong>{deleteDialog.subCategory.name}</strong>.</>}</p><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDeleteDialog(null)}>Cancel</button><button className="danger-action" disabled={saving} type="button" onClick={confirmDelete}>{saving ? 'Deleting…' : 'Delete'}</button></div></div></div>}
   </div>;
 }
 
