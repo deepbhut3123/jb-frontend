@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Select, Switch } from 'antd';
-import { MessageCircle, QrCode, Save } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Link2, MessageSquareText, QrCode, Save, UserRoundPlus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../../services/api.js';
 import LoadingButton from '../../../components/LoadingButton.jsx';
+import whatsappLogo from '../../../assets/whatsapp-logo.svg';
 
 const statuses = ['New', 'Quotation', 'Followup', 'Performa-Invoice', 'Done', 'Lost'];
 const matchingModes = [
-  { value: 'contains', label: 'Contains this phrase' },
-  { value: 'exact', label: 'Matches the whole message' },
-  { value: 'any', label: 'Contains any listed phrase' },
-  { value: 'all', label: 'Contains every listed phrase' },
+  { value: 'contains', label: 'Message contains this phrase' },
+  { value: 'exact', label: 'Message is exactly this text' },
+  { value: 'any', label: 'Message contains any phrase' },
+  { value: 'all', label: 'Message contains all phrases' },
 ];
 const connectionLabels = { disconnected: 'Disconnected', starting: 'Starting WhatsApp', qr: 'Waiting for QR scan', authenticating: 'Connecting', connected: 'Connected', error: 'Connection error' };
 
@@ -37,6 +38,7 @@ function DefaultDropdown({ label, type, value, options, onChange, onAdded, token
 
 export default function WhatsAppWorkspace({ token }) {
   const [activeTab, setActiveTab] = useState('whatsapp');
+  const [setupStep, setSetupStep] = useState(1);
   const [form, setForm] = useState(null);
   const [users, setUsers] = useState([]);
   const [options, setOptions] = useState([]);
@@ -110,50 +112,55 @@ export default function WhatsAppWorkspace({ token }) {
   const starting = ['starting', 'authenticating'].includes(connection.status);
   const awaitingScan = connection.status === 'qr';
   const connected = connection.status === 'connected';
+  const leadSetupReady = Boolean(form?.assignedTo && form?.status && form?.source);
+  const messageRuleReady = Boolean(form?.matchText?.trim());
+  const setupSteps = [
+    { number: 1, label: 'Connection', icon: Link2, complete: connected },
+    { number: 2, label: 'New lead setup', icon: UserRoundPlus, complete: leadSetupReady },
+    { number: 3, label: 'Message rules', icon: MessageSquareText, complete: messageRuleReady },
+  ];
 
   return <div className="crm-content-inner wa-settings">
-    <div className="section-heading"><div><h1>Integrations</h1><p>Connect external channels and turn matching enquiries into leads.</p></div></div>
-    <div className="integration-tabs" role="tablist" aria-label="Integration channels">
-      <button className={activeTab === 'whatsapp' ? 'active' : ''} type="button" role="tab" aria-selected={activeTab === 'whatsapp'} onClick={() => setActiveTab('whatsapp')}><MessageCircle size={17} />WhatsApp</button>
-      <button className={activeTab === 'indiamart' ? 'active' : ''} type="button" role="tab" aria-selected={activeTab === 'indiamart'} onClick={() => setActiveTab('indiamart')}><span className="integration-tab-mark">IM</span>IndiaMART</button>
-    </div>
-    {activeTab === 'indiamart' ? <section className="wa-card integration-placeholder" role="tabpanel"><div className="integration-placeholder-icon">IM</div><h2>IndiaMART integration</h2><p>Connect your IndiaMART account here to receive enquiries and create leads automatically.</p><span className="integration-coming-soon">Setup coming next</span></section> : <section className="integration-panel" role="tabpanel">
-    <div className="section-heading wa-channel-heading"><div><h2>WhatsApp connection</h2><p>Connect your number and turn matching enquiries into leads.</p></div><span className={`wa-connection-badge ${connected && !pollError ? 'is-connected' : ''}`} role="status"><span />{pollError ? 'Status unavailable' : connectionLabels[connection.status] || connection.status}</span></div>
-    <section className="wa-card wa-connection-card">
-      <div><div className="wa-card-title"><MessageCircle size={21} /><h2>Connect WhatsApp</h2></div><p>Link one company WhatsApp account. On your phone, open WhatsApp → Linked devices → Link a device, then scan the QR code.</p>
-        {connected && <p className="wa-connected-number">Linked account: <strong>{connection.account?.replace(/@.*$/, '')}</strong></p>}
-        <div className="wa-actions"><LoadingButton type="button" loading={action === 'connect' || starting} loadingText="Connecting…" disabled={Boolean(action) || connected || awaitingScan || Boolean(pollError)} onClick={() => changeConnection('connect')}>{connection.status === 'disconnected' ? 'Connect WhatsApp' : 'Reconnect'}</LoadingButton>
-          {(connected || awaitingScan || connection.status === 'error') && <LoadingButton type="button" className="secondary-action" loading={action === 'disconnect'} loadingText="Logging out…" disabled={Boolean(action)} onClick={() => changeConnection('disconnect')}>Log out WhatsApp</LoadingButton>}
-        </div><p className="wa-hint">The connection stays on the server when you leave this page. Logging out requires another QR scan.</p>
-        {(pollError || connection.error) && <p className="form-message error" role="alert">{pollError || connection.error}</p>}
+    <div className="integration-header-row">
+      <div className="section-heading"><div><h1>Integrations</h1></div></div>
+      <div className="integration-tabs" role="tablist" aria-label="Integration channels">
+        <button id="whatsapp-tab" className={activeTab === 'whatsapp' ? 'active' : ''} type="button" role="tab" aria-controls="whatsapp-panel" aria-selected={activeTab === 'whatsapp'} onClick={() => setActiveTab('whatsapp')}><img className="integration-whatsapp-logo" src={whatsappLogo} alt="" />WhatsApp</button>
+        <button id="indiamart-tab" className={activeTab === 'indiamart' ? 'active' : ''} type="button" role="tab" aria-controls="indiamart-panel" aria-selected={activeTab === 'indiamart'} onClick={() => setActiveTab('indiamart')}><span className="integration-tab-mark">IM</span>IndiaMART</button>
       </div>
-      <div className="wa-qr-area">{connection.qr && !pollError ? <img src={connection.qr} width="240" height="240" alt="Scan this QR code from WhatsApp Linked devices" /> : <><QrCode size={56} strokeWidth={1} /><span>{connected ? 'Your WhatsApp is connected' : starting || awaitingScan ? 'Preparing a fresh QR code…' : 'Your QR code will appear here'}</span></>}</div>
-    </section>
-    {loadError ? <div className="wa-card" role="alert"><p>{loadError}</p><button className="secondary-action" type="button" onClick={() => setReload((value) => value + 1)}>Retry loading settings</button></div> : !form ? <p role="status">Loading settings…</p> : <form onSubmit={save}>
-      <fieldset className="wa-settings-fields" disabled={saving || testing}>
-        <section className="wa-card wa-enable"><div><h2>Automatic lead creation</h2><p>Process new matching direct text messages. Groups, outgoing messages, and status updates are skipped.</p></div><Switch aria-label="Enable automatic lead creation" checked={form.enabled} onChange={(value) => update('enabled', value)} disabled={saving || testing} /></section>
-        <div className="wa-settings-grid">
-          <section className="wa-card"><h2>Default lead values</h2><p>These defaults apply to new WhatsApp leads. Existing leads keep their current values.</p>
-            <div className="wa-fields-grid"><label>Default assignee<Select aria-label="Default assignee" className="antd-crm-select" showSearch optionFilterProp="label" value={form.assignedTo || undefined} placeholder="Select employee" disabled={saving || testing} options={users.map((user) => ({ value: user._id, label: user.name }))} onChange={(value) => update('assignedTo', value)} /></label>
-              <label>Default status<Select aria-label="Default status" className="antd-crm-select" value={form.status} disabled={saving || testing} options={statuses.map((status) => ({ value: status, label: status }))} onChange={(value) => update('status', value)} /></label>
-              {[['Default source', 'leadSource', 'source'], ['Customer type', 'customerType', 'customerType'], ['Segment', 'segment', 'segment']].map(([label, type, field]) => <DefaultDropdown key={field} label={label} type={type} value={form[field]} options={options} token={token} required={field === 'source'} onChange={(value) => update(field, value)} onAdded={(option) => setOptions((current) => [...current, option])} />)}
-              <label>Priority<Select aria-label="Priority" className="antd-crm-select" value={form.priority} disabled={saving || testing} options={['Low', 'Medium', 'High'].map((value) => ({ value, label: value }))} onChange={(value) => update('priority', value)} /></label>
-            </div><p className="wa-hint">New leads start with zero follow-ups. Repeat enquiries are linked to the existing lead by phone number, including the country code.</p>
-          </section>
-          <section className="wa-card"><h2>Message matching</h2><p>Edit the message or phrases that should create a lead.</p>
-            <div className="wa-rule-fields"><label>Match rule<Select aria-label="Match rule" className="antd-crm-select" value={form.matchMode} disabled={saving || testing} options={matchingModes} onChange={(value) => update('matchMode', value)} /></label>
-              <label>{['any', 'all'].includes(form.matchMode) ? 'Phrases — one per line' : 'Message to match'}<textarea maxLength={2000} rows={4} value={form.matchText} onChange={(event) => update('matchText', event.target.value)} placeholder="Example: I need a quotation" required={form.enabled} /></label>
-              <label className="wa-checkbox"><input type="checkbox" checked={form.caseSensitive} onChange={(event) => update('caseSensitive', event.target.checked)} />Match capitalization exactly</label>
-              <p className="wa-hint">Extra spaces and line breaks are normalized. Blank matching text never creates leads.</p>
-              <label>Test with a sample message<textarea maxLength={10000} rows={3} value={sample} onChange={(event) => { setSample(event.target.value); setPreview(null); }} placeholder="Paste a customer message here" /></label>
-              <LoadingButton type="button" className="secondary-action" loading={testing} disabled={!sample.trim() || !form.matchText.trim()} onClick={testMessage}>Test matching</LoadingButton>
-              {preview !== null && <p className={`form-message ${preview ? 'success' : 'error'}`} role="status">{preview ? 'Matches this rule. No lead was created by this test.' : 'Does not match. This message would be skipped.'}</p>}
+    </div>
+    {activeTab === 'indiamart' ? <section id="indiamart-panel" aria-labelledby="indiamart-tab" className="wa-card integration-placeholder" role="tabpanel"><div className="integration-placeholder-icon">IM</div><h2>IndiaMART integration</h2><p>Connect IndiaMART to receive enquiries as leads.</p><span className="integration-coming-soon">Coming soon</span></section> :
+    <form id="whatsapp-panel" aria-labelledby="whatsapp-tab" className="wa-workspace" role="tabpanel" onSubmit={save}>
+      <header className="wa-workspace-header">
+        <div className="wa-brand-block"><span className="wa-brand-icon"><img src={whatsappLogo} alt="" /></span><div><h2>WhatsApp lead capture</h2>{connected && <span className="wa-account-number">{connection.account?.replace(/@.*$/, '')}</span>}</div></div>
+        <div className="wa-header-controls"><span className={`wa-connection-badge ${connected && !pollError ? 'is-connected' : ''}`} role="status"><span />{pollError ? 'Status unavailable' : connectionLabels[connection.status] || connection.status}</span>{form && <label className={`wa-automation-switch${connected ? ' is-available' : ' is-locked'}`}><span className="wa-automation-label"><i />Lead automation</span><strong>{connected ? (form.enabled ? 'On' : 'Off') : 'Connect first'}</strong><Switch aria-label="Lead automation" checked={connected && form.enabled} onChange={(value) => update('enabled', value)} disabled={saving || testing || !connected || Boolean(pollError)} /></label>}</div>
+      </header>
+      <div className="wa-workspace-body">
+        <nav className="wa-setup-nav" aria-label="WhatsApp setup steps">
+          {setupSteps.map((step) => { const StepIcon = step.icon; return <button key={step.number} className={`${setupStep === step.number ? 'active' : ''}${step.complete ? ' complete' : ''}`} type="button" aria-current={setupStep === step.number ? 'step' : undefined} onClick={() => setSetupStep(step.number)}><span className="wa-nav-step-icon">{step.complete ? <Check size={16} /> : <StepIcon size={17} />}</span><span><small>Step {step.number}</small><strong>{step.label}</strong></span><ChevronRight className="wa-nav-chevron" size={16} /></button>; })}
+        </nav>
+        <main className="wa-stage">
+          {setupStep === 1 && <section className="wa-stage-panel">
+            <div className="wa-stage-heading"><span>1</span><h2>Connect company WhatsApp</h2></div>
+            <div className="wa-connect-layout">
+              <div className="wa-connect-guide">
+                <ol><li><span>1</span>Open WhatsApp on the company phone</li><li><span>2</span>Open Linked devices and select Link a device</li><li><span>3</span>Scan the QR code shown here</li></ol>
+                <div className="wa-actions"><LoadingButton type="button" loading={action === 'connect' || starting} loadingText="Connecting..." disabled={Boolean(action) || connected || awaitingScan || Boolean(pollError)} onClick={() => changeConnection('connect')}>{connection.status === 'disconnected' ? 'Show QR code' : 'Reconnect WhatsApp'}</LoadingButton>{(connected || awaitingScan || connection.status === 'error') && <LoadingButton type="button" className="secondary-action" loading={action === 'disconnect'} loadingText="Disconnecting..." disabled={Boolean(action)} onClick={() => changeConnection('disconnect')}>Disconnect</LoadingButton>}</div>
+                {(pollError || connection.error) && <p className="form-message error" role="alert">{pollError || connection.error}</p>}
+              </div>
+              <div className={`wa-qr-area${connected ? ' is-connected' : ''}`}>{connection.qr && !pollError ? <img src={connection.qr} width="240" height="240" alt="Scan this QR code from WhatsApp Linked devices" /> : <><QrCode size={58} strokeWidth={1.2} /><strong>{connected ? 'WhatsApp is connected' : starting || awaitingScan ? 'Preparing QR code...' : 'Select Show QR code'}</strong></>}</div>
             </div>
-          </section>
-        </div>
-      </fieldset>
-      <div className="wa-save-bar"><span>{dirty ? 'You have unsaved changes.' : 'Saved settings apply to incoming messages.'}</span><LoadingButton loading={saving} loadingText="Saving…" disabled={testing}><Save size={16} /> Save settings</LoadingButton></div>
+          </section>}
+          {setupStep === 2 && <section className="wa-stage-panel">
+            <div className="wa-stage-heading"><span>2</span><h2>Choose new lead details</h2></div>
+            {loadError ? <div className="wa-inline-error" role="alert"><span>{loadError}</span><button className="secondary-action" type="button" onClick={() => setReload((value) => value + 1)}>Try again</button></div> : !form ? <div className="wa-stage-loading" role="status">Loading lead settings...</div> : <fieldset className="wa-settings-fields" disabled={saving || testing}><div className="wa-fields-grid"><label>Assign leads to<Select aria-label="Assign leads to" className="antd-crm-select" showSearch optionFilterProp="label" value={form.assignedTo || undefined} placeholder="Select employee" options={users.map((user) => ({ value: user._id, label: user.name }))} onChange={(value) => update('assignedTo', value)} /></label><label>Lead status<Select aria-label="Lead status" className="antd-crm-select" value={form.status} options={statuses.map((status) => ({ value: status, label: status }))} onChange={(value) => update('status', value)} /></label>{[['Lead source', 'leadSource', 'source'], ['Customer type', 'customerType', 'customerType'], ['Segment', 'segment', 'segment']].map(([label, type, field]) => <DefaultDropdown key={field} label={label} type={type} value={form[field]} options={options} token={token} required={field === 'source'} onChange={(value) => update(field, value)} onAdded={(option) => setOptions((current) => [...current, option])} />)}<label>Priority<Select aria-label="Priority" className="antd-crm-select" value={form.priority} options={['Low', 'Medium', 'High'].map((value) => ({ value, label: value }))} onChange={(value) => update('priority', value)} /></label></div><div className="wa-info-strip"><Check size={16} />Repeat phone numbers update the existing lead.</div></fieldset>}
+          </section>}
+          {setupStep === 3 && <section className="wa-stage-panel">
+            <div className="wa-stage-heading"><span>3</span><h2>Choose messages that create leads</h2></div>
+            {loadError ? <div className="wa-inline-error" role="alert"><span>{loadError}</span><button className="secondary-action" type="button" onClick={() => setReload((value) => value + 1)}>Try again</button></div> : !form ? <div className="wa-stage-loading" role="status">Loading message rules...</div> : <fieldset className="wa-settings-fields" disabled={saving || testing}><div className="wa-rule-layout"><div className="wa-rule-fields"><label>When should a lead be created?<Select aria-label="When should a lead be created?" className="antd-crm-select" value={form.matchMode} options={matchingModes} onChange={(value) => update('matchMode', value)} /></label><label>{['any', 'all'].includes(form.matchMode) ? 'Enter phrases, one per line' : 'Enter the message text'}<textarea maxLength={2000} rows={6} value={form.matchText} onChange={(event) => update('matchText', event.target.value)} placeholder="Example: I need a quotation" required={form.enabled} /></label><label className="wa-checkbox"><input type="checkbox" checked={form.caseSensitive} onChange={(event) => update('caseSensitive', event.target.checked)} />Treat capital and small letters differently</label></div><div className="wa-test-box"><div className="wa-test-heading"><MessageSquareText size={18} /><strong>Check a customer message</strong></div><label>Customer message<textarea maxLength={10000} rows={6} value={sample} onChange={(event) => { setSample(event.target.value); setPreview(null); }} placeholder="Paste a message here" /></label><LoadingButton type="button" className="secondary-action" loading={testing} disabled={!sample.trim() || !form.matchText.trim()} onClick={testMessage}>Check message</LoadingButton>{preview !== null && <p className={`form-message ${preview ? 'success' : 'error'}`} role="status">{preview ? 'This message will create a lead.' : 'This message will be ignored.'}</p>}</div></div></fieldset>}
+          </section>}
+        </main>
+      </div>
+      <footer className="wa-workspace-footer"><span className={dirty ? 'is-dirty' : ''}>{dirty ? 'Unsaved changes' : 'Settings saved'}</span><div>{setupStep > 1 && <button className="secondary-action" type="button" onClick={() => setSetupStep((step) => step - 1)}><ChevronLeft size={16} />Back</button>}{setupStep < 3 ? <button className="primary-action" type="button" disabled={!form} onClick={() => setSetupStep((step) => step + 1)}>Continue<ChevronRight size={16} /></button> : <LoadingButton loading={saving} loadingText="Saving..." disabled={!form || testing}><Save size={16} />Save changes</LoadingButton>}</div></footer>
     </form>}
-    </section>}
   </div>;
 }
