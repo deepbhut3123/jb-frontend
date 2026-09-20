@@ -8,29 +8,24 @@ import locationIconUrl from "../assets/contact-location.svg";
 import phoneIconUrl from "../assets/contact-phone.svg";
 import emailIconUrl from "../assets/contact-email.svg";
 import webIconUrl from "../assets/contact-web.svg";
-import googlePayUrl from "../assets/payment-google-pay.svg";
-import phonePeUrl from "../assets/payment-phonepe.svg";
-import paytmUrl from "../assets/payment-paytm.svg";
-import bhimUrl from "../assets/payment-bhim.svg";
 
 const COMPANY = {
   name: "JB CORPORATION",
-  tagline: "Importer & Supplier of Linear Motion Solutions",
-  address: "A-xxx, Industrial Area, Ahmedabad - 382xxx, Gujarat, India",
-  phone: "+91 81608 54963",
-  email: "info@jbcorporation.in",
-  website: "www.jbcorporation.in",
-  signatory: "Bhavin Patel",
-  bankName: "HDFC Bank",
-  accountNumber: "50200012345678",
-  ifsc: "HDFC0001234",
-  branch: "Ahmedabad",
-  upiId: "jbcorporation@hdfcbank",
+  tagline: "Precision You Can Trust. Performance You Can Rely On.",
+  address: "Shed No.151, Ved Industrial Park-2, Bhuvaldi Road, B/H Shreenath Estate, Near Hinglaj Mata Temple, Kathwada, Ahmedabad, Gujarat - 382430",
+  phone: "+91 9265581679",
+  email: "jbcorporation2023@gmail.com",
+  website: "www.jbcorporation.co.in",
+  bankName: "The Kalupur Commercial Co-op Bank Ltd",
+  accountNumber: "03920101971",
+  ifsc: "KCCB0KTW039",
+  branch: "Kathwada, Ahmedabad",
+  upiId: "jbcorporation2023@okaxis",
 };
 
 const BLUE = [9, 67, 135];
 const ORANGE = [244, 102, 15];
-const LIGHT_BLUE = [241, 247, 252];
+const LIGHT_BLUE = [234, 242, 249];
 const TEXT = [25, 39, 65];
 const LIGHT_ORANGE = [255, 231, 214];
 
@@ -44,10 +39,11 @@ function dateText(value) {
 }
 
 function quotationNumber(quotation) {
-  const year = new Date(quotation.quotationDate || quotation.createdAt || Date.now()).getFullYear();
-  const identity = String(quotation._id || "000001").slice(-6).toUpperCase();
+  const year = quotation.quotationYear || new Date(quotation.quotationDate || quotation.createdAt || Date.now()).getFullYear();
+  const serial = quotation.serialNumber || 1;
+  const initial = String(quotation.creatorInitial || quotation.createdByName || "J").trim().charAt(0).toUpperCase();
   const revision = Number(quotation.revisionNumber || 0) > 0 ? `/R${quotation.revisionNumber}` : "";
-  return `JB/QTN/${year}/${identity}${revision}`;
+  return `JB/QTN/${year}/${serial}/${initial}${revision}`;
 }
 
 function numberToWords(value) {
@@ -207,8 +203,8 @@ function addPageFooter(doc, contactIcons) {
       if (icon) doc.addImage(icon, "PNG", footerX[index] - 2, 287.1, 3.8, 3.8, undefined, "FAST");
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.8);
-      doc.text(value, footerX[index] + 4.3, 289.9, { maxWidth: index === 0 ? 70 : 30 });
+      doc.setFontSize(index === 0 ? 4.6 : 5.8);
+      doc.text(value, footerX[index] + 4.3, index === 0 ? 288.4 : 289.9, { maxWidth: index === 0 ? 72 : 30, lineHeightFactor: 1.08 });
     });
   }
 }
@@ -218,20 +214,19 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   doc.setProperties({ title: `Quotation ${quotationNumber(quotation)}`, subject: `Quotation for ${quotation.company || quotation.customerName}`, author: COMPANY.name });
   const svgAssets = await Promise.all([
     ...[locationIconUrl, phoneIconUrl, emailIconUrl, webIconUrl].map((url) => svgPngData(url, 128, 128, "#f4660f").catch(() => null)),
-    ...[googlePayUrl, phonePeUrl, paytmUrl, bhimUrl].map((url) => svgPngData(url).catch(() => null)),
   ]);
-  const [locationIcon, phoneIcon, emailIcon, webIcon, googlePayLogo, phonePeLogo, paytmLogo, bhimLogo] = svgAssets;
+  const [locationIcon, phoneIcon, emailIcon, webIcon] = svgAssets;
   const [brandLogo, tlxLogo] = await Promise.all([trimmedImageData(logoUrl).catch(() => null), trimmedImageData(tlxLogoUrl).catch(() => null)]);
 
-  if (brandLogo) doc.addImage(brandLogo, "PNG", 19, 2, 16, 16, undefined, "FAST");
+  if (brandLogo) doc.addImage(brandLogo, "PNG", 20, 3, 14, 14, undefined, "FAST");
   doc.setTextColor(...BLUE);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12.5);
   doc.text(COMPANY.name, 10, 21.5);
   doc.setTextColor(...TEXT);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(5.8);
-  doc.text(COMPANY.tagline, 10, 25);
+  doc.setFontSize(4.8);
+  doc.text(["Precision You Can Trust.", "Performance You Can Rely On."], 33.5, 24, { align: "center", lineHeightFactor: 1.08 });
   doc.setDrawColor(...BLUE);
   doc.setLineWidth(0.45);
   doc.line(57, 3, 57, 27);
@@ -259,7 +254,7 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
 
   const address = [lead?.address1, lead?.address2, [lead?.area, lead?.city, lead?.state].filter(Boolean).join(", ")].filter(Boolean);
   card(doc, 6, 32, 106, 59);
-  card(doc, 116, 43, 84, 15);
+  card(doc, 116, 43, 84, 16);
   card(doc, 116, 60, 84, 31);
   doc.setFillColor(...BLUE);
   doc.roundedRect(116, 32, 84, 9, 1.4, 1.4, "F");
@@ -285,9 +280,9 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
 
   const validUntil = new Date(quotation.quotationDate || quotation.createdAt || Date.now());
   validUntil.setDate(validUntil.getDate() + 15);
-  field(doc, "Quotation No.", quotationNumber(quotation), 120, 48, 152, 43, 8);
-  field(doc, "Date", dateText(quotation.quotationDate || quotation.createdAt), 120, 53, 152, 43, 8);
-  field(doc, "Valid Until", dateText(validUntil), 120, 58, 152, 43, 8);
+  field(doc, "Quotation No.", quotationNumber(quotation), 120, 47.8, 152, 43, 8);
+  field(doc, "Date", dateText(quotation.quotationDate || quotation.createdAt), 120, 52.4, 152, 43, 8);
+  field(doc, "Valid Until", dateText(validUntil), 120, 57, 152, 43, 8);
   field(doc, "Kind Attn.", quotation.customerName, 120, 66, 152, 43, 8);
   field(doc, "Subject", "Quotation for Linear Motion Products", 120, 71, 152, 43, 8);
   doc.setTextColor(...TEXT);
@@ -303,23 +298,32 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
     return image ? productImage(image).catch(() => null) : null;
   }));
   const freightPacking = Math.max(Number(quotation.freightPacking || 0), 0);
-  const productTaxAmount = quotationItems.reduce((total, item) => total + Number(item.lineTotal ?? (Number(item.quantity || 0) * Number(item.unitPrice || 0) - Number(item.discountAmount || 0))) * Number(item.taxRate || 0) / 100, 0);
+  const productsAmount = quotationItems.reduce((total, item) => total + Number(item.lineTotal ?? (Number(item.quantity || 0) * Number(item.unitPrice || 0))), 0);
+  const generalDiscountAmount = Math.min(Math.max(Number(quotation.generalDiscountAmount || 0), 0), productsAmount);
+  const generalDiscountFactor = productsAmount > 0 ? (productsAmount - generalDiscountAmount) / productsAmount : 1;
+  const productTaxAmount = quotationItems.reduce((total, item) => {
+    const lineAmount = Number(item.lineTotal ?? (Number(item.quantity || 0) * Number(item.unitPrice || 0)));
+    const taxableLineAmount = lineAmount * generalDiscountFactor;
+    return total + taxableLineAmount * Number(item.taxRate || 0) / 100;
+  }, 0);
   const taxAmount = Number((productTaxAmount + freightPacking * 0.18).toFixed(2));
   const taxableAmount = Number(quotation.amount || 0);
   const grandTotal = Number((taxableAmount + taxAmount).toFixed(2));
   const rows = quotationItems.map((item, index) => {
     const product = productMap.get(String(item.productId)) || {};
     const description = item.description || item.productName || "Product";
-    const discount = Number(item.discountAmount || 0);
+    const quantity = Number(item.quantity || 0);
+    const lineAmount = Number(item.lineTotal ?? (quantity * Number(item.unitPrice || 0)));
+    const effectiveRate = quantity > 0 ? lineAmount / quantity : Number(item.unitPrice || 0);
     return [
       index + 1,
-      discount > 0 ? `${description}\nDiscount: ${money(discount)} (${Number(item.discountPercent || 0).toFixed(2)}%)` : description,
+      description,
       product.brand || "-",
       item.productCode || product.partCode || product.code || "-",
-      money(item.quantity).replace(/\.00$/, ""),
+      money(quantity).replace(/\.00$/, ""),
       item.unit || product.unit || "Nos.",
-      money(item.unitPrice),
-      money(item.lineTotal),
+      money(effectiveRate),
+      money(lineAmount),
     ];
   });
   autoTable(doc, {
@@ -382,9 +386,9 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   autoTable(doc, {
     startY: y + 7,
     body: [
-      ["Basic Amount", "Rs.", money(quotation.subtotal ?? taxableAmount)],
+      ["Basic Amount", "Rs.", money(productsAmount)],
       ["Freight / Packing", "Rs.", money(freightPacking)],
-      ["Discount", "Rs.", `- ${money(quotation.discountAmount)}`],
+      ["Discount", "Rs.", `- ${money(generalDiscountAmount)}`],
       ["Taxable Amount", "Rs.", money(taxableAmount)],
       ["GST", "Rs.", money(taxAmount)],
       ["Grand Total", "Rs.", money(grandTotal)],
@@ -439,27 +443,21 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   doc.setFontSize(8.2);
   doc.text("Scan the QR code to", 161, y + 13);
   doc.text("make payment via UPI", 161, y + 17.5);
-  if (googlePayLogo) doc.addImage(googlePayLogo, "PNG", 161, y + 20.5, 11, 4.6, undefined, "FAST");
-  if (phonePeLogo) doc.addImage(phonePeLogo, "PNG", 179, y + 20.5, 14, 4.6, undefined, "FAST");
-  if (paytmLogo) doc.addImage(paytmLogo, "PNG", 161, y + 27, 11, 3.8, undefined, "FAST");
-  if (bhimLogo) doc.addImage(bhimLogo, "PNG", 179.5, y + 26.8, 13.5, 4.1, undefined, "FAST");
   doc.setTextColor(...BLUE);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.2);
-  doc.text(`UPI ID: ${COMPANY.upiId}`, 178.5, y + 35.5, { align: "center", maxWidth: 39 });
+  doc.setFontSize(7);
+  doc.text(`UPI ID: ${COMPANY.upiId}`, 178.5, y + 27, { align: "center", maxWidth: 39 });
 
   const signatureY = y + 42;
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...BLUE);
   doc.setFontSize(7.5);
-  doc.text(`For ${COMPANY.name}`, 10, signatureY);
-  doc.setDrawColor(80, 90, 105);
-  doc.setLineWidth(0.3);
-  doc.line(10, signatureY + 7.5, 56, signatureY + 7.5);
+  doc.text(`For ${COMPANY.name}`, 10, signatureY + 2.5);
   doc.setTextColor(...TEXT);
-  doc.text(COMPANY.signatory, 10, signatureY + 11);
-  doc.setFont("helvetica", "normal");
-  doc.text("Authorized Signatory", 10, signatureY + 14.5);
+  // Temporarily hidden as requested. Restore these two lines when the signatory block is required.
+  // doc.text(String(quotation.createdByName || COMPANY.name), 10, signatureY + 11);
+  // doc.setFont("helvetica", "normal");
+  // doc.text("Authorized Signatory", 10, signatureY + 14.5);
   doc.setTextColor(95, 105, 120);
   doc.setFontSize(7.1);
   doc.text(["Thank you for your business.", "We look forward to a long and mutually beneficial association."], 122, signatureY + 8, { maxWidth: 78, lineHeightFactor: 1.25 });

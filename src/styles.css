@@ -581,7 +581,7 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-items { display: grid; gap: 10px; }
 .quotation-items-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #4d4b66; font-size: .75rem; }
 .quotation-items-heading .secondary-action { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px; font-size: .7rem; }
-.quotation-item-labels, .quotation-item-row { display: grid; grid-template-columns: minmax(210px, 1.05fr) minmax(220px, 1.25fr) 76px 90px 110px 125px 32px; align-items: center; gap: 10px; }
+.quotation-item-labels, .quotation-item-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(190px, 1.1fr) 70px 82px 105px 100px 110px 32px; align-items: center; gap: 10px; }
 .quotation-item-labels { padding: 0 2px; color: #9695a6; font-size: .68rem; font-weight: 650; }
 .quotation-product-mount { display: block; min-width: 0; }
 .quotation-product-select { width: 100% !important; min-width: 0 !important; }
@@ -607,6 +607,10 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-item-row .quotation-line-total small { min-height: 1em; color: #9695a6; font-size: .62rem; font-weight: 500; text-decoration: line-through; }
 .quotation-totals { display: grid; justify-content: end; gap: 6px; padding-top: 8px; border-top: 1px solid #eeeeF4; }
 .quotation-totals > span { display: flex; justify-content: space-between; gap: 24px; min-width: 270px; color: #68677c; font-size: .76rem; }
+.quotation-final-discount { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 15px; border: 1px solid #e2e1eb; border-radius: 10px; background: #fafaff; }
+.quotation-final-discount label { display: flex; flex-direction: column; gap: 7px; color: #29264f; font-size: .78rem; font-weight: 600; }
+.quotation-final-discount input { min-height: 44px; width: 100%; padding: 0 12px; border: 1px solid #dedee8; border-radius: 9px; outline: 0; background: #fff; color: #29264f; font: inherit; }
+.quotation-final-discount input:focus { border-color: #392c98; box-shadow: 0 0 0 3px rgba(57,44,152,.1); }
 .quotation-total { padding-top: 7px; margin-top: 2px; border-top: 1px solid #eeeeF4; font-size: .82rem !important; }
 .quotation-total strong { color: #392c98; }
 .product-fields { grid-template-columns: 1fr 1fr; }
@@ -1151,6 +1155,7 @@ img, svg { max-width: 100%; }
     .quotation-item-row > textarea { grid-column: auto; grid-row: auto; }
     .quotation-item-row > .icon-action { justify-self: end; }
     .quotation-item-row > span { text-align: left; }
+    .quotation-final-discount { grid-template-columns: 1fr; }
     .quotation-history-summary { grid-template-columns: 1fr; }
     .quotation-history-heading { align-items: flex-start; flex-direction: column; }
 
