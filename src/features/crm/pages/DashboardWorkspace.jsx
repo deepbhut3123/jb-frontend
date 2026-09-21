@@ -230,9 +230,9 @@ function DashboardOverview({ leads = [], session }) {
               <div className="activity-row" key={lead._id}>
                 <div className="activity-status" />
                 <div>
-                  <strong>{lead.name}</strong>
+                  <strong>{lead.company || "Unnamed company"}</strong>
                   <span>
-                    {lead.city || lead.company || "No city"} - {lead.status}
+                    {lead.city || "No city"} - {lead.status}
                   </span>
                 </div>
                 <time>{formatDisplayDate(lead.createdAt)}</time>

@@ -9,7 +9,7 @@ import { formatDisplayDate } from "../CrmUtils.jsx";
 
 const quotationStatuses = ["Draft", "Sent", "Accepted", "Rejected"];
 const emptyItem = { productId: "", description: "", quantity: 1, discountPercent: 0, discountAmount: 0, discountMode: "percent" };
-const emptyForm = { leadId: "", customerName: "", company: "", email: "", phone: "", freightPacking: 0, generalDiscountPercent: 0, generalDiscountAmount: 0, generalDiscountMode: "percent", items: [emptyItem], quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: "" };
+const emptyForm = { leadId: "", contactPersonId: "", contactPersonKey: "", contactName: "", contactRole: "", company: "", email: "", phone: "", freightPacking: 0, generalDiscountPercent: 0, generalDiscountAmount: 0, generalDiscountMode: "percent", items: [emptyItem], quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: "" };
 
 function savedQuotationItem(item) {
   return { productId: item.productId, description: item.description ?? item.productName ?? "", quantity: item.quantity, discountPercent: item.discountPercent || 0, discountAmount: item.discountAmount || 0, discountMode: "percent" };
@@ -41,7 +41,7 @@ function revisionChanges(current, previous) {
   if (Number(current.freightPacking || 0) !== Number(previous.freightPacking || 0)) changes.push(`Freight / Packing changed from ${formatCurrency(previous.freightPacking)} to ${formatCurrency(current.freightPacking)}`);
   if (Number(current.amount || 0) !== Number(previous.amount || 0)) changes.push(`Total changed from ${formatCurrency(previous.amount)} to ${formatCurrency(current.amount)}`);
   if (current.status !== previous.status) changes.push(`Status changed from ${previous.status} to ${current.status}`);
-  if (current.customerName !== previous.customerName || current.company !== previous.company || current.email !== previous.email || current.phone !== previous.phone) changes.push("Customer or contact details updated");
+  if (current.contactName !== previous.contactName || current.contactRole !== previous.contactRole || current.company !== previous.company || current.email !== previous.email || current.phone !== previous.phone) changes.push("Company or person details updated");
   const itemSnapshot = (quotation) => JSON.stringify((quotation.items || []).map((item) => ({ productId: String(item.productId), description: item.description || "", quantity: Number(item.quantity), unitPrice: Number(item.unitPrice), discountAmount: Number(item.discountAmount || 0) })).sort((a, b) => a.productId.localeCompare(b.productId)));
   if (itemSnapshot(current) !== itemSnapshot(previous)) changes.push("Product details or pricing updated");
   return changes.length ? changes : ["Revision saved without pricing changes"];
@@ -58,6 +58,8 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
   const [pendingDownloads, setPendingDownloads] = useState({});
   const [form, setForm] = useState(emptyForm);
   const handledDeepLink = useRef(false);
+  const selectedLead = useMemo(() => leads.find((lead) => String(lead._id) === String(form.leadId)) || null, [form.leadId, leads]);
+  const selectedLeadPeople = selectedLead?.companyPersons || [];
   const productOptions = useMemo(() => products.filter((product) => product.isActive !== false).map((product) => {
     const code = product.partCode || product.code || product.name || "Product";
     const description = product.description || product.name || "No description available";
@@ -102,9 +104,25 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
 
   function applyLead(leadId, base = emptyForm) {
     const lead = leads.find((item) => String(item._id) === String(leadId));
-    if (!lead) return { ...base, leadId };
-    const contact = lead.companyPersons?.[0] || {};
-    return { ...base, leadId, customerName: lead.name || contact.name || "", company: lead.company === "N/A" ? "" : lead.company || "", email: lead.email || contact.email || "", phone: lead.phone || contact.contactNumber || "" };
+    if (!lead) return { ...base, leadId, contactPersonId: "", contactPersonKey: "", contactRole: "" };
+    return { ...base, leadId, contactPersonId: "", contactPersonKey: "", contactName: "", contactRole: "", company: lead.company === "N/A" ? "" : lead.company || "", email: "", phone: "" };
+  }
+
+  function applyPerson(contactPersonId) {
+    setForm((current) => {
+      const lead = leads.find((item) => String(item._id) === String(current.leadId));
+      const person = lead?.companyPersons?.find((item, index) => String(item._id || `legacy-${index}`) === String(contactPersonId));
+      if (!person) return { ...current, contactPersonId: "", contactPersonKey: "", contactName: "", contactRole: "", email: "", phone: "" };
+      return {
+        ...current,
+        contactPersonId: person._id || "",
+        contactPersonKey: contactPersonId,
+        contactName: person.name || "",
+        contactRole: person.role || person.designation || "",
+        email: person.email || "",
+        phone: person.number || person.contactNumber || "",
+      };
+    });
   }
 
   function openCreate(leadId = "") {
@@ -113,12 +131,16 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
   }
 
   function openEdit(quotation) {
-    setForm({ leadId: quotation.leadId || "", customerName: quotation.customerName, company: quotation.company, email: quotation.email, phone: quotation.phone, freightPacking: quotation.freightPacking || 0, generalDiscountPercent: quotation.generalDiscountPercent || 0, generalDiscountAmount: quotation.generalDiscountAmount || 0, generalDiscountMode: "percent", items: quotation.items?.map(savedQuotationItem) || [], quotationDate: quotation.quotationDate?.slice(0, 10) || quotation.createdAt?.slice(0, 10) || dayjs().format("YYYY-MM-DD"), status: quotation.status, revisedFromId: "" });
+    const lead = leads.find((item) => String(item._id) === String(quotation.leadId));
+    const savedPersonId = lead?.companyPersons?.some((person) => String(person._id) === String(quotation.contactPersonId)) ? quotation.contactPersonId : "";
+    setForm({ leadId: quotation.leadId || "", contactPersonId: savedPersonId, contactPersonKey: savedPersonId, contactName: quotation.contactName || "", contactRole: quotation.contactRole || "", company: quotation.company, email: quotation.email, phone: quotation.phone, freightPacking: quotation.freightPacking || 0, generalDiscountPercent: quotation.generalDiscountPercent || 0, generalDiscountAmount: quotation.generalDiscountAmount || 0, generalDiscountMode: "percent", items: quotation.items?.map(savedQuotationItem) || [], quotationDate: quotation.quotationDate?.slice(0, 10) || quotation.createdAt?.slice(0, 10) || dayjs().format("YYYY-MM-DD"), status: quotation.status, revisedFromId: "" });
     setDialog({ mode: "edit", quotation });
   }
 
   function openRevision(quotation) {
-    setForm({ leadId: quotation.leadId || "", customerName: quotation.customerName, company: quotation.company, email: quotation.email, phone: quotation.phone, freightPacking: quotation.freightPacking || 0, generalDiscountPercent: quotation.generalDiscountPercent || 0, generalDiscountAmount: quotation.generalDiscountAmount || 0, generalDiscountMode: "percent", items: quotation.items?.map(savedQuotationItem) || [emptyItem], quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: quotation._id });
+    const lead = leads.find((item) => String(item._id) === String(quotation.leadId));
+    const savedPersonId = lead?.companyPersons?.some((person) => String(person._id) === String(quotation.contactPersonId)) ? quotation.contactPersonId : "";
+    setForm({ leadId: quotation.leadId || "", contactPersonId: savedPersonId, contactPersonKey: savedPersonId, contactName: quotation.contactName || "", contactRole: quotation.contactRole || "", company: quotation.company, email: quotation.email, phone: quotation.phone, freightPacking: quotation.freightPacking || 0, generalDiscountPercent: quotation.generalDiscountPercent || 0, generalDiscountAmount: quotation.generalDiscountAmount || 0, generalDiscountMode: "percent", items: quotation.items?.map(savedQuotationItem) || [emptyItem], quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: quotation._id });
     setDialog({ mode: "revise", quotation });
   }
 
@@ -129,8 +151,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
     const lead = leads.find((item) => String(item._id) === leadId);
     if (params.get("create") === "1" && leadId && lead) {
       handledDeepLink.current = true;
-      const contact = lead.companyPersons?.[0] || {};
-      setForm({ ...emptyForm, leadId, customerName: lead.name || contact.name || "", company: lead.company === "N/A" ? "" : lead.company || "", email: lead.email || contact.email || "", phone: lead.phone || contact.contactNumber || "" });
+      setForm({ ...emptyForm, leadId, contactPersonId: "", contactPersonKey: "", contactName: "", contactRole: "", company: lead.company === "N/A" ? "" : lead.company || "", email: "", phone: "" });
       setDialog({ mode: "create" });
       window.history.replaceState({}, "", "/quotations");
     }
@@ -263,17 +284,17 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
       </div>
       <div className="quotation-table-wrap">
         <table className="quotation-table">
-          <thead><tr><th>Lead / Customer</th><th>Version</th><th>Contact</th><th>Amount</th><th>Status</th><th>Quotation date</th><th>Created by</th><th className="actions-heading">Actions</th></tr></thead>
+          <thead><tr><th>Company</th><th>Version</th><th>Person</th><th>Amount</th><th>Status</th><th>Quotation date</th><th>Created by</th><th className="actions-heading">Actions</th></tr></thead>
           <tbody>
             {visibleQuotationGroups.length ? visibleQuotationGroups.map((group) => { const quotation = group.latest; return (
               <tr className="quotation-row" key={group.rootId} onClick={() => setDialog({ mode: "history", group })}>
-                <td><strong>{quotation.customerName}</strong><small>{quotation.company || "No company"}</small>{quotation.items?.length ? <div className="quotation-table-products">{quotation.items.map((item, itemIndex) => <small key={`${item.productId}-${itemIndex}`} title={quotationItemDescription(item)}>{quotationItemValue(item, productById)} × {item.quantity}</small>)}</div> : <small>No products</small>}</td>
+                <td><strong>{quotation.company || "No company"}</strong><small>{quotation.contactName || "No person selected"}</small>{quotation.items?.length ? <div className="quotation-table-products">{quotation.items.map((item, itemIndex) => <small key={`${item.productId}-${itemIndex}`} title={quotationItemDescription(item)}>{quotationItemValue(item, productById)} × {item.quantity}</small>)}</div> : <small>No products</small>}</td>
                 <td><div className="quotation-version-cell">{Number(quotation.revisionNumber) > 0 ? <span className="quotation-revision-badge">Revision {quotation.revisionNumber}</span> : <span className="quotation-original-badge">Original</span>}<small>{group.revisions.length} version{group.revisions.length === 1 ? "" : "s"}</small></div></td>
                 <td><div className="quotation-contact"><span className={!quotation.email ? "is-empty" : ""}><Mail size={14} />{quotation.email || "No email"}</span><span className={!quotation.phone ? "is-empty" : ""}><Phone size={14} /><PhoneLink phone={quotation.phone} /></span></div></td>
                 <td className="quotation-amount-cell"><strong>Rs. {Number(quotation.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>{Number(quotation.generalDiscountPercent) > 0 && <small>{quotation.generalDiscountPercent}% general discount</small>}</td>
-                <td><div className="quotation-table-status" onClick={(event) => event.stopPropagation()}><LeadDropdown value={pendingStatuses[quotation._id] || quotation.status} options={quotationStatuses} onChange={(status) => updateStatus(quotation, status)} disabled={Boolean(pendingStatuses[quotation._id])} loading={Boolean(pendingStatuses[quotation._id])} ariaLabel={`Status for ${quotation.customerName}`} /></div></td>
+                <td><div className="quotation-table-status" onClick={(event) => event.stopPropagation()}><LeadDropdown value={pendingStatuses[quotation._id] || quotation.status} options={quotationStatuses} onChange={(status) => updateStatus(quotation, status)} disabled={Boolean(pendingStatuses[quotation._id])} loading={Boolean(pendingStatuses[quotation._id])} ariaLabel={`Status for ${quotation.company || "quotation"}`} /></div></td>
                 <td>{formatDisplayDate(quotation.quotationDate || quotation.createdAt)}</td><td>{quotation.createdByName || "You"}</td>
-                <td><div className="table-actions" onClick={(event) => event.stopPropagation()}><button className="icon-action download" type="button" title="Download quotation PDF" aria-label={`Download quotation for ${quotation.customerName}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={16} /></button><button className="icon-action quotation" type="button" title={quotation.leadId ? "Create revised quotation" : "Link this older quotation to a lead before revising"} disabled={!quotation.leadId} onClick={() => openRevision(quotation)}><CopyPlus size={16} /></button><button className="icon-action edit" type="button" title="Edit latest quotation" onClick={() => openEdit(quotation)}><Edit3 size={16} /></button><button className="icon-action delete" type="button" title="Delete latest quotation" onClick={() => setDialog({ mode: "delete", quotation })}><Trash2 size={16} /></button></div></td>
+                <td><div className="table-actions" onClick={(event) => event.stopPropagation()}><button className="icon-action download" type="button" title="Download quotation PDF" aria-label={`Download quotation for ${quotation.company || "company"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={16} /></button><button className="icon-action quotation" type="button" title={quotation.leadId ? "Create revised quotation" : "Link this older quotation to a lead before revising"} disabled={!quotation.leadId} onClick={() => openRevision(quotation)}><CopyPlus size={16} /></button><button className="icon-action edit" type="button" title="Edit latest quotation" onClick={() => openEdit(quotation)}><Edit3 size={16} /></button><button className="icon-action delete" type="button" title="Delete latest quotation" onClick={() => setDialog({ mode: "delete", quotation })}><Trash2 size={16} /></button></div></td>
               </tr>
             ); }) : <tr><td className="empty-table" colSpan="8">No quotations found for this filter.</td></tr>}
           </tbody>
@@ -283,7 +304,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
       {dialog?.mode === "history" && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}>
           <div className="user-modal quotation-history-modal">
-            <div className="modal-heading"><div><span className="dashboard-kicker">Revision history</span><h2>{dialog.group.latest.customerName}</h2><p>{dialog.group.revisions.length} saved version{dialog.group.revisions.length === 1 ? "" : "s"}</p></div><button className="modal-close" type="button" aria-label="Close revision history" onClick={() => setDialog(null)}><X size={18} /></button></div>
+            <div className="modal-heading"><div><span className="dashboard-kicker">Revision history</span><h2>{dialog.group.latest.company || "Unnamed company"}</h2><p>{dialog.group.revisions.length} saved version{dialog.group.revisions.length === 1 ? "" : "s"}</p></div><button className="modal-close" type="button" aria-label="Close revision history" onClick={() => setDialog(null)}><X size={18} /></button></div>
             <div className="quotation-history-list">
               {dialog.group.revisions.map((quotation, index, revisions) => ({ quotation, previous: revisions[index - 1] })).reverse().map(({ quotation, previous }, index) => (
                 <article className={index === 0 ? "latest" : ""} key={quotation._id}>
@@ -298,17 +319,20 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
           </div>
         </div>
       )}
-      {dialog?.mode === "delete" && <div className="modal-backdrop" role="presentation"><div className="confirm-modal"><div className="confirm-icon"><Trash2 size={20} /></div><h2>Delete this quotation?</h2><p>This will permanently remove the quotation for <strong>{dialog.quotation.customerName}</strong>.</p><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="danger-action" type="button" onClick={deleteQuotation}>Delete quotation</button></div></div></div>}
+      {dialog?.mode === "delete" && <div className="modal-backdrop" role="presentation"><div className="confirm-modal"><div className="confirm-icon"><Trash2 size={20} /></div><h2>Delete this quotation?</h2><p>This will permanently remove the quotation for <strong>{dialog.quotation.company || "this company"}</strong>.</p><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="danger-action" type="button" onClick={deleteQuotation}>Delete quotation</button></div></div></div>}
       {dialog && ["create", "edit", "revise"].includes(dialog.mode) && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}>
           <form className="user-modal quotation-modal" onSubmit={submitQuotation}>
             <div className="modal-heading"><div><span className="dashboard-kicker">Quotation workspace</span><h2>{dialog.mode === "create" ? "Add a new quotation" : dialog.mode === "revise" ? `Create revision ${(dialog.quotation.revisionNumber || 0) + 1}` : "Edit quotation"}</h2></div><button className="modal-close" type="button" aria-label="Close" onClick={() => setDialog(null)}><X size={18} /></button></div>
             <div className="modal-fields">
-              <label className="full-field">Lead<Select className="antd-crm-select quotation-lead-select" showSearch optionFilterProp="label" value={form.leadId || undefined} placeholder="Select a lead" disabled={dialog.mode !== "create" && Boolean(form.leadId)} options={leads.map((lead) => ({ value: lead._id, label: `${lead.name || "Unnamed lead"}${lead.company && lead.company !== "N/A" ? ` - ${lead.company}` : ""}`.toLocaleUpperCase("en-IN") }))} onChange={(leadId) => setForm((current) => applyLead(leadId, current))} /></label>
+              <label className="full-field">Company lead<Select className="antd-crm-select quotation-lead-select" showSearch optionFilterProp="label" value={form.leadId || undefined} placeholder="Select a company" disabled={dialog.mode !== "create" && Boolean(form.leadId)} options={leads.map((lead) => ({ value: lead._id, label: (lead.company && lead.company !== "N/A" ? lead.company : "Unnamed company").toLocaleUpperCase("en-IN") }))} onChange={(leadId) => setForm((current) => applyLead(leadId, current))} /></label>
+              <label className="full-field">Person<Select className="antd-crm-select quotation-lead-select" allowClear showSearch optionFilterProp="label" value={form.contactPersonKey || undefined} placeholder={!form.leadId ? "Select a company first" : selectedLeadPeople.length ? "Select a person" : "No people added to this company"} disabled={!form.leadId || !selectedLeadPeople.length} options={selectedLeadPeople.map((person, index) => ({ value: person._id || `legacy-${index}`, label: `${person.name || `Person ${index + 1}`}${person.role ? ` - ${person.role}` : ""}${person.number ? ` - ${person.number}` : ""}` }))} onChange={applyPerson} onClear={() => applyPerson("")} /></label>
+              {selectedLead && <div className="full-field quotation-lead-summary"><strong>Company details</strong><div><span><small>Company</small>{selectedLead.company && selectedLead.company !== "N/A" ? selectedLead.company : "Not provided"}</span><span><small>Company type</small>{selectedLead.customerType || "Not provided"}</span><span><small>Address</small>{[selectedLead.address1, selectedLead.address2, selectedLead.area, selectedLead.city, selectedLead.state].filter(Boolean).join(", ") || "Not provided"}</span><span><small>People</small>{selectedLeadPeople.length}</span></div></div>}
               <label>Quotation date<AntDatePicker value={form.quotationDate} onChange={(quotationDate) => setForm({ ...form, quotationDate })} required /></label>
-              <label>Customer name<input className="quotation-name-input" required value={form.customerName} onChange={(event) => setForm({ ...form, customerName: event.target.value })} placeholder="Taken from lead" /></label>
+              <label>Person name<input className="quotation-name-input" value={form.contactName} onChange={(event) => setForm({ ...form, contactName: event.target.value })} placeholder="Taken from selected person" /></label>
+              <label>Role<input value={form.contactRole} onChange={(event) => setForm({ ...form, contactRole: event.target.value })} placeholder="Taken from selected person" /></label>
               <label>Company name<input className="quotation-name-input" value={form.company} onChange={(event) => setForm({ ...form, company: event.target.value })} placeholder="Optional" /></label>
-              <label>Email address<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="customer@company.com" /></label>
+              <label>Email address<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="person@company.com" /></label>
               <label>Phone number<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value.replace(/\D/g, "") })} placeholder="Optional" /></label>
               <div className="full-field quotation-items">
                 <div className="quotation-items-heading"><strong>Products from Product Master</strong><button className="secondary-action" type="button" onClick={() => setForm({ ...form, items: [...form.items, { ...emptyItem }] })}><Plus size={14} />Add product</button></div>

@@ -211,7 +211,7 @@ function addPageFooter(doc, contactIcons) {
 
 export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  doc.setProperties({ title: `Quotation ${quotationNumber(quotation)}`, subject: `Quotation for ${quotation.company || quotation.customerName}`, author: COMPANY.name });
+  doc.setProperties({ title: `Quotation ${quotationNumber(quotation)}`, subject: `Quotation for ${quotation.company || "company"}`, author: COMPANY.name });
   const svgAssets = await Promise.all([
     ...[locationIconUrl, phoneIconUrl, emailIconUrl, webIconUrl].map((url) => svgPngData(url, 128, 128, "#f4660f").catch(() => null)),
   ]);
@@ -269,12 +269,12 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   doc.setFont("helvetica", "bold");
   doc.text("To,", 10, 39);
   doc.setFontSize(11.5);
-  doc.text(`M/s. ${quotation.company || quotation.customerName}`, 10, 45, { maxWidth: 97 });
+  doc.text(`M/s. ${quotation.company || ""}`, 10, 45, { maxWidth: 97 });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.2);
-  let customerY = 51;
-  address.slice(0, 3).forEach((line) => { doc.text(String(line), 10, customerY, { maxWidth: 97 }); customerY += 4.4; });
-  field(doc, "Contact Person", quotation.customerName, 10, 69, 47, 60, 8);
+  let companyY = 51;
+  address.slice(0, 3).forEach((line) => { doc.text(String(line), 10, companyY, { maxWidth: 97 }); companyY += 4.4; });
+  field(doc, "Contact Person", [quotation.contactName, quotation.contactRole].filter(Boolean).join(" - "), 10, 69, 47, 60, 8);
   field(doc, "Contact No.", quotation.phone, 10, 75, 47, 60, 8);
   field(doc, "Email", quotation.email, 10, 81, 47, 60, 8);
 
@@ -283,7 +283,7 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   field(doc, "Quotation No.", quotationNumber(quotation), 120, 47.8, 152, 43, 8);
   field(doc, "Date", dateText(quotation.quotationDate || quotation.createdAt), 120, 52.4, 152, 43, 8);
   field(doc, "Valid Until", dateText(validUntil), 120, 57, 152, 43, 8);
-  field(doc, "Kind Attn.", quotation.customerName, 120, 66, 152, 43, 8);
+  field(doc, "Kind Attn.", [quotation.contactName, quotation.contactRole].filter(Boolean).join(" - "), 120, 66, 152, 43, 8);
   field(doc, "Subject", "Quotation for Linear Motion Products", 120, 71, 152, 43, 8);
   doc.setTextColor(...TEXT);
   doc.setFont("helvetica", "normal");
@@ -463,6 +463,6 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   doc.text(["Thank you for your business.", "We look forward to a long and mutually beneficial association."], 122, signatureY + 8, { maxWidth: 78, lineHeightFactor: 1.25 });
 
   addPageFooter(doc, { location: locationIcon, phone: phoneIcon, email: emailIcon, web: webIcon });
-  const safeName = String(quotation.company || quotation.customerName || "customer").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "");
-  doc.save(`${quotationNumber(quotation).replaceAll("/", "-")}-${safeName || "customer"}.pdf`);
+  const safeName = String(quotation.company || "company").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "");
+  doc.save(`${quotationNumber(quotation).replaceAll("/", "-")}-${safeName || "company"}.pdf`);
 }

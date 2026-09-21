@@ -10,6 +10,23 @@ import { AntDatePicker, AssigneeDropdown, LeadDropdown, PhoneLink } from "../Crm
 import { formatDisplayDate } from "../CrmUtils.jsx";
 import { navigate } from "../../../utils/navigation.js";
 
+const emptyCompanyPerson = { name: "", role: "", number: "", email: "" };
+
+function normalizeCompanyPersons(companyPersons = []) {
+  return companyPersons
+    .map((person) => {
+      const normalized = {
+        name: (person.name || "").trim(),
+        role: (person.role || person.designation || "").trim(),
+        number: (person.number || person.contactNumber || "").trim(),
+        email: (person.email || "").trim(),
+      };
+      if (!Object.values(normalized).some(Boolean)) return null;
+      return person._id ? { ...normalized, _id: person._id } : normalized;
+    })
+    .filter(Boolean);
+}
+
 function cleanupLeadTableEnhancements() {
   window.dispatchEvent(new Event("jb:lead-table-update-start"));
   document
@@ -72,19 +89,16 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
   });
   const [sendingFollowUp, setSendingFollowUp] = useState(null);
   const [form, setForm] = useState({
-    name: "",
     company: "",
     address1: "",
     address2: "",
     area: "",
     city: "",
     state: "",
-    email: "",
     website: "",
-    phone: "",
     customerType: "",
     segment: "",
-    companyPersons: [{ name: "", email: "", contactNumber: "", designation: "", department: "" }],
+    companyPersons: [],
     leadSource: "",
     assignedTo: "",
     stage: "New",
@@ -303,13 +317,10 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
 
   function openCreate() {
     setForm({
-      name: "",
       company: "",
       address1: "", address2: "", area: "", city: "", state: "",
-      email: "",
       website: "",
-      phone: "",
-      customerType: "", segment: "", companyPersons: [{ name: "", email: "", contactNumber: "", designation: "", department: "" }], leadSource: "",
+      customerType: "", segment: "", companyPersons: [], leadSource: "",
       assignedTo: currentUser.id,
       stage: "New",
       nextFollowUp: "",
@@ -318,13 +329,10 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
   }
   function openEdit(lead) {
     setForm({
-      name: lead.name,
       company: lead.company === "N/A" ? "" : lead.company,
       address1: lead.address1 || "", address2: lead.address2 || "", area: lead.area || "", city: lead.city || "", state: lead.state || "",
-      email: lead.email,
       website: lead.website || "",
-      phone: lead.phone,
-      customerType: lead.customerType || "", segment: lead.segment || "", companyPersons: lead.companyPersons?.length ? lead.companyPersons : [{ name: "", email: "", contactNumber: "", designation: "", department: "" }], leadSource: lead.leadSource || lead.source || "",
+      customerType: lead.customerType || "", segment: lead.segment || "", companyPersons: normalizeCompanyPersons(lead.companyPersons), leadSource: lead.leadSource || lead.source || "",
       assignedTo: lead.assignedTo,
       stage: lead.stage || lead.status || "New",
       nextFollowUp: lead.nextFollowUp ? lead.nextFollowUp.slice(0, 10) : "",
@@ -334,13 +342,9 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
   async function updateInline(lead, changes) {
     try {
       const result = await api.updateLead(token, lead._id, {
-        name: lead.name,
         company: lead.company === "N/A" ? "" : lead.company,
         address1: lead.address1 || "", address2: lead.address2 || "", area: lead.area || "", city: lead.city || "", state: lead.state || "",
-        email: lead.email,
         website: lead.website || "",
-        phone: lead.phone,
-        contactNumber: lead.phone,
         customerType: lead.customerType || "Individual", segment: lead.segment || "SMB", companyPersons: lead.companyPersons || [],
         assignedTo: lead.assignedTo,
         leadSource: lead.leadSource || lead.source,
@@ -363,10 +367,11 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
     event.preventDefault();
     try {
       const mode = dialog.mode;
+      const payload = { ...form, companyPersons: normalizeCompanyPersons(form.companyPersons) };
       const result =
         mode === "create"
-          ? await api.createLead(token, form)
-          : await api.updateLead(token, dialog.lead._id, form);
+          ? await api.createLead(token, payload)
+          : await api.updateLead(token, dialog.lead._id, payload);
       commitLeads(
         mode === "create"
           ? [result.lead, ...leads]
@@ -484,7 +489,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
       <div className="section-heading">
         <div>
           <h1>Leads</h1>
-          <p>Click a company or customer name to view its complete details.</p>
+          <p>Click a company name to view its details and people.</p>
         </div>
         <button className="primary-action" type="button" onClick={openCreate}>
           <Plus size={17} />
@@ -539,7 +544,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
         <table className="leads-table">
           <thead>
             <tr>
-              <th>Company / Customer</th>
+              <th>Company</th>
               <th>City</th>
               <th>Contact</th>
               <th>Source</th>
@@ -566,19 +571,19 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
                         setDialog({ mode: "details", lead });
                       }}
                     >
-                      <span>{(lead.company || lead.name || "?").slice(0, 1).toUpperCase()}</span>
-                      <span className="lead-company-customer">
+                      <span>{(lead.company || "?").slice(0, 1).toUpperCase()}</span>
+                      <span className="lead-company-summary">
                         <strong>{lead.company && lead.company !== "N/A" ? lead.company : "No company"}</strong>
-                        <small>{lead.name || "No customer name"}</small>
+                        <small>{lead.companyPersons?.length || 0} {lead.companyPersons?.length === 1 ? "person" : "people"}</small>
                       </span>
                     </button>
                   </td>
                   <td>{lead.city || "N/A"}</td>
                   <td>
                     <div className="lead-contact">
-                      <span>{lead.email || "No email"}</span>
+                      <span>{lead.companyPersons?.[0]?.email || "No email"}</span>
                       <small>
-                        <PhoneLink phone={lead.phone} />
+                        <PhoneLink phone={lead.companyPersons?.[0]?.number} />
                       </small>
                     </div>
                   </td>
@@ -707,17 +712,6 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               </button>
             </div>
             <div className="modal-fields">
-              <label>
-                Name
-                <input
-                  className="lead-name-input"
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm({ ...form, name: event.target.value })
-                  }
-                  placeholder="Enter customer name"
-                />
-              </label>
               <label>Company name<input className="lead-name-input" value={form.company} onChange={(event) => setForm({ ...form, company: event.target.value })} placeholder="Company name" /></label>
               <label>
                 Address 1
@@ -735,44 +729,20 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               <label>State<LeadDropdown value={form.state} options={Object.keys(indiaLocations)} placeholder="Select state" showStatusIndicator={false} onChange={(state) => setForm({ ...form, state, city: "" })} /></label>
               <label>City<LeadDropdown value={form.city} options={form.state ? indiaLocations[form.state] || [] : []} placeholder={form.state ? "Select city" : "Select state first"} showStatusIndicator={false} disabled={!form.state} onChange={(city) => setForm({ ...form, city })} /></label>
               <label>
-                Email address
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(event) =>
-                    setForm({ ...form, email: event.target.value })
-                  }
-                  placeholder="contact@company.com"
-                />
-              </label>
-              <label>
                 Website
                 <input type="url" value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} placeholder="https://example.com" />
               </label>
               <label>
-                Contact Number
-                <input
-                  value={form.phone}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      phone: event.target.value.replace(/\D/g, ""),
-                    })
-                  }
-                  placeholder="Optional"
-                />
-              </label>
-              <label>
-                Customer Type
-                <LeadDropdown value={form.customerType} options={optionsFor("customerType")} placeholder="Select customer type" onChange={(customerType) => setForm({ ...form, customerType })} showStatusIndicator={false} manageLabel="Manage customer types" onManage={isAdmin ? () => setOptionDialog("customerType") : undefined} />
+                Company Type
+                <LeadDropdown value={form.customerType} options={optionsFor("customerType")} placeholder="Select company type" onChange={(customerType) => setForm({ ...form, customerType })} showStatusIndicator={false} manageLabel="Manage company types" onManage={isAdmin ? () => setOptionDialog("customerType") : undefined} />
               </label>
               <label>
                 Segment
                 <LeadDropdown value={form.segment} options={optionsFor("segment")} placeholder="Select segment" onChange={(segment) => setForm({ ...form, segment })} showStatusIndicator={false} manageLabel="Manage segments" onManage={isAdmin ? () => setOptionDialog("segment") : undefined} />
               </label>
               <div className="full-field company-persons-field">
-                <div className="company-persons-heading"><strong>Company Person Detail</strong><button className="secondary-action" type="button" onClick={() => setForm({ ...form, companyPersons: [...form.companyPersons, { name: "", email: "", contactNumber: "", designation: "", department: "" }] })}><Plus size={14} />Add person</button></div>
-                {form.companyPersons.map((person, index) => <div className="company-person-row" key={index}><input value={person.name} onChange={(event) => updateCompanyPerson(index, { name: event.target.value })} placeholder="Name" /><input type="email" value={person.email} onChange={(event) => updateCompanyPerson(index, { email: event.target.value })} placeholder="Email" /><input value={person.contactNumber} onChange={(event) => updateCompanyPerson(index, { contactNumber: event.target.value.replace(/\D/g, "") })} placeholder="Contact Number" /><input value={person.designation} onChange={(event) => updateCompanyPerson(index, { designation: event.target.value })} placeholder="Designation" /><input value={person.department} onChange={(event) => updateCompanyPerson(index, { department: event.target.value })} placeholder="Department" />{form.companyPersons.length > 1 && <button className="icon-action delete" type="button" title="Remove person" onClick={() => setForm({ ...form, companyPersons: form.companyPersons.filter((_, personIndex) => personIndex !== index) })}><Trash2 size={15} /></button>}</div>)}
+                <div className="company-persons-heading"><div><strong>People</strong><small>Optional — add one or more contacts for this lead.</small></div><button className="secondary-action" type="button" onClick={() => setForm((current) => ({ ...current, companyPersons: [...current.companyPersons, { ...emptyCompanyPerson }] }))}><Plus size={14} />Add person</button></div>
+                {form.companyPersons.map((person, index) => <div className="company-person-row" key={index}><input maxLength={100} value={person.name} onChange={(event) => updateCompanyPerson(index, { name: event.target.value })} placeholder="Name (optional)" aria-label={`Person ${index + 1} name`} /><input maxLength={100} value={person.role} onChange={(event) => updateCompanyPerson(index, { role: event.target.value })} placeholder="Role (optional)" aria-label={`Person ${index + 1} role`} /><input inputMode="tel" maxLength={30} value={person.number} onChange={(event) => updateCompanyPerson(index, { number: event.target.value })} placeholder="Number (optional)" aria-label={`Person ${index + 1} number`} /><input type="email" maxLength={160} value={person.email} onChange={(event) => updateCompanyPerson(index, { email: event.target.value })} placeholder="Email (optional)" aria-label={`Person ${index + 1} email`} /><button className="icon-action delete" type="button" title="Remove person" aria-label={`Remove person ${index + 1}`} onClick={() => setForm((current) => ({ ...current, companyPersons: current.companyPersons.filter((_, personIndex) => personIndex !== index) }))}><Trash2 size={15} /></button></div>)}
               </div>
               <label>
                 Lead Source
@@ -821,7 +791,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
           <div className="confirm-modal">
             <div className="confirm-icon"><Trash2 size={20} /></div>
             <h2>Delete this lead?</h2>
-            <p>This will permanently remove <strong>{deleteDialog.name || "this lead"}</strong> and all its details.</p>
+            <p>This will permanently remove <strong>{deleteDialog.company || "this lead"}</strong> and all its details.</p>
             <div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDeleteDialog(null)}>Cancel</button><button className="danger-action" type="button" onClick={confirmDeleteLead}>Delete lead</button></div>
           </div>
         </div>
@@ -829,7 +799,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
       {optionDialog && isAdmin && (
         <LeadOptionManager
           type={optionDialog}
-          label={optionDialog === "customerType" ? "Customer type" : optionDialog === "leadSource" ? "Lead source" : "Segment"}
+          label={optionDialog === "customerType" ? "Company type" : optionDialog === "leadSource" ? "Lead source" : "Segment"}
           options={leadOptions.filter((option) => option.type === optionDialog)}
           token={token}
           onClose={() => setOptionDialog(null)}
@@ -850,8 +820,8 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
             <div className="modal-heading">
               <div>
                 <span className="dashboard-kicker">Lead details</span>
-                <h2>{details.name}</h2>
-                <p>{details.company || "N/A"}</p>
+                <h2>{details.company || "Unnamed company"}</h2>
+                <p>{details.companyPersons?.length || 0} {details.companyPersons?.length === 1 ? "person" : "people"}</p>
               </div>
               <button
                 className="modal-close"
@@ -869,17 +839,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               <div><span>City</span><strong>{details.city || "Not provided"}</strong></div>
               <div><span>State</span><strong>{details.state || "Not provided"}</strong></div>
               <div>
-                <span>Email</span>
-                <strong>{details.email || "No email"}</strong>
-              </div>
-              <div>
-                <span>Phone</span>
-                <strong>
-                  <PhoneLink phone={details.phone} />
-                </strong>
-              </div>
-              <div>
-                <span>Customer type</span>
+                <span>Company type</span>
                 <strong>{details.customerType || "Not provided"}</strong>
               </div>
               <div>
@@ -904,8 +864,8 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               </div>
             </div>
             <div className="lead-detail-company-persons company-person-details">
-              <span>Company person details</span>
-              {details.companyPersons?.length ? details.companyPersons.map((person, index) => <div className="company-person-detail" key={index}><strong>{person.name || "Unnamed person"}</strong><small>{person.email || "No email"} - {person.contactNumber || "No contact"} - {person.designation || "No designation"} - {person.department || "No department"}</small></div>) : <p>No company persons added.</p>}
+              <span>People</span>
+              {details.companyPersons?.length ? details.companyPersons.map((person, index) => { const personDetails = [person.role || person.designation, person.number || person.contactNumber, person.email].filter(Boolean); return <div className="company-person-detail" key={person._id || index}><strong>{person.name || `Person ${index + 1}`}</strong>{personDetails.length > 0 && <small>{personDetails.join(" · ")}</small>}</div>; }) : <p>No persons added.</p>}
             </div>
             <div className="modal-footer">
               <button
@@ -932,7 +892,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               <div>
                 <span className="dashboard-kicker">Activity timeline</span>
                 <h2>Follow-up history</h2>
-                <p>{dialog.lead.name}</p>
+                <p>{dialog.lead.company || "Unnamed company"}</p>
               </div>
               <button
                 className="modal-close"
