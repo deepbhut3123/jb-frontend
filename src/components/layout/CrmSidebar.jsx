@@ -4,7 +4,7 @@ import {
   FolderTree,
   LayoutDashboard,
   LogOut,
-  MessageCircle,
+  // MessageCircle,
   Package,
   ShieldCheck,
   UserRound,
@@ -81,7 +81,22 @@ function CrmSidebar({
           </button>
         )}
       </nav>
-      {isAdmin && <nav className="crm-navigation crm-integrations-navigation" aria-label="Integrations"><button className={activeSection === 'whatsapp' ? 'active' : ''} data-tooltip="Integrations" type="button" onClick={() => onNavigate('whatsapp')}><MessageCircle aria-hidden="true" size={19} strokeWidth={1.8} />Integrations</button></nav>}
+      {/* {isAdmin && (
+        <nav
+          className="crm-navigation crm-integrations-navigation"
+          aria-label="Integrations"
+        >
+          <button
+            className={activeSection === "whatsapp" ? "active" : ""}
+            data-tooltip="Integrations"
+            type="button"
+            onClick={() => onNavigate("whatsapp")}
+          >
+            <MessageCircle aria-hidden="true" size={19} strokeWidth={1.8} />
+            Integrations
+          </button>
+        </nav>
+      )} */}
       <div className="sidebar-user">
         <div className="user-avatar">
           {session.user.name.slice(0, 1).toUpperCase()}

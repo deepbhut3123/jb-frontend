@@ -12,7 +12,7 @@ function AuthPage({ mode = 'login' }) {
           <p className="eyebrow">JB Corporation · Internal CRM</p>
           <h1>One workspace.<br /><em>Every relationship.</em></h1>
           <p className="summary">
-            Manage customer enquiries, product information, quotations, follow-ups,
+            Manage company enquiries, product information, quotations, follow-ups,
             and team activity from one secure workspace built for JB Corporation.
           </p>
 

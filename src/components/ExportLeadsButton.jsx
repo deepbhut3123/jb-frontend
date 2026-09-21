@@ -124,8 +124,11 @@ function ExportLeadsButton() {
         toast.error('Select at least one lead to export.');
         return;
       }
-      const headers = ['Lead', 'Company', 'Email', 'Phone', 'Source', 'Status', 'Priority', 'Assigned to', 'Follow-up records'];
-      const rows = leads.map((lead) => [lead.name, lead.company, lead.email, lead.phone, lead.source, lead.status, lead.priority || 'Medium', lead.assignedName, lead.followUps?.length || (lead.nextFollowUp ? 1 : 0)]);
+      const headers = ['Company', 'People', 'Roles', 'Emails', 'Numbers', 'Source', 'Status', 'Priority', 'Assigned to', 'Follow-up records'];
+      const rows = leads.map((lead) => {
+        const people = lead.companyPersons || [];
+        return [lead.company, people.map((person) => person.name).filter(Boolean).join('; '), people.map((person) => person.role).filter(Boolean).join('; '), people.map((person) => person.email).filter(Boolean).join('; '), people.map((person) => person.number).filter(Boolean).join('; '), lead.source, lead.status, lead.priority || 'Medium', lead.assignedName, lead.followUps?.length || (lead.nextFollowUp ? 1 : 0)];
+      });
       const csv = [headers, ...rows].map((row) => row.map(csvValue).join(',')).join('\r\n');
       const url = URL.createObjectURL(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' }));
       const link = document.createElement('a');

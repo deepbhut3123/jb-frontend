@@ -668,6 +668,10 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-product-mount { display: block; min-width: 0; }
 .quotation-product-select { width: 100% !important; min-width: 0 !important; }
 .quotation-lead-select { width: 100%; margin-top: 7px; }
+.quotation-lead-summary { display: grid; gap: 10px; padding: 13px; border: 1px solid #e7e7ef; border-radius: 10px; background: #fafafd; color: #4d4b66; }
+.quotation-lead-summary > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.quotation-lead-summary span { display: grid; gap: 4px; min-width: 0; color: #29264f; font-size: .78rem; font-weight: 500; overflow-wrap: anywhere; }
+.quotation-lead-summary small { color: #9695a6; font-size: .65rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .quotation-discount-field { display: grid; align-content: start; gap: 8px; color: #29264f; font-size: .78rem; font-weight: 600; }
 .quotation-discount-field > label { display: block; color: inherit; font-size: inherit; font-weight: inherit; }
 .quotation-modal .modal-fields > label { align-content: start; }
@@ -851,17 +855,19 @@ h1 em { color: #d36517; font-style: normal; }
 .leads-table .assignee-avatar { width: 23px; height: 23px; border-radius: 6px; font-size: .64rem; }
 .lead-name-button { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: #29264f; cursor: pointer; text-align: left; }
 .lead-name-button > span { display: none; }
-.lead-name-button > .lead-company-customer { display: grid; gap: 4px; }
-.lead-company-customer strong { color: #29264f; font-size: .86rem; line-height: 1.25; }
-.lead-company-customer small { color: #9695a6; font-size: .7rem; font-weight: 500; line-height: 1.25; }
-.lead-company-customer strong, .lead-company-customer small, .quotation-table td:first-child > strong, .quotation-table td:first-child > small:first-of-type { text-transform: uppercase; }
+.lead-name-button > .lead-company-summary { display: grid; gap: 4px; }
+.lead-company-summary strong { color: #29264f; font-size: .86rem; line-height: 1.25; }
+.lead-company-summary small { color: #9695a6; font-size: .7rem; font-weight: 500; line-height: 1.25; }
+.lead-company-summary strong, .lead-company-summary small, .quotation-table td:first-child > strong, .quotation-table td:first-child > small:first-of-type { text-transform: uppercase; }
 .lead-name-input, .quotation-name-input { text-transform: uppercase; }
 .lead-name-button:hover strong { color: #392c98; text-decoration: underline; text-underline-offset: 3px; }
 .lead-details-modal { width: min(580px, 100%); padding: 28px; border: 1px solid rgba(255,255,255,.7); border-radius: 18px; background: #fff; box-shadow: 0 24px 60px rgba(30,27,75,.24); animation: modal-rise .24s cubic-bezier(.2,.8,.2,1); }
 .company-persons-field { display: grid; gap: 10px; }
 .company-persons-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #4d4b66; }
+.company-persons-heading > div { display: grid; gap: 3px; }
+.company-persons-heading small { color: #9695a6; font-size: .7rem; font-weight: 400; }
 .company-persons-heading .secondary-action { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px; font-size: .7rem; }
-.company-person-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) 30px; gap: 7px; align-items: center; }
+.company-person-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) 30px; gap: 7px; align-items: center; }
 .company-person-row input { min-width: 0; }
 .company-person-detail { display: grid; gap: 3px; padding: 9px 0; border-top: 1px solid #eeeeF4; }
 .company-person-detail small { color: #68677c; font-size: .72rem; line-height: 1.4; }
@@ -1112,6 +1118,7 @@ h1 em { color: #d36517; font-style: normal; }
   .lead-status-tabs { width: 100%; }
   .leads-table-wrap { overflow-x: auto; }
   .modal-fields { grid-template-columns: 1fr; }
+  .quotation-lead-summary > div { grid-template-columns: 1fr 1fr; }
   .product-fields { grid-template-columns: 1fr; }
   .full-field { grid-column: auto; }
   .lead-detail-grid { grid-template-columns: 1fr; }
