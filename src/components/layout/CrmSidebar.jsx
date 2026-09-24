@@ -8,6 +8,8 @@ import {
   Package,
   ShieldCheck,
   UserRound,
+  Settings,
+  UsersRound,
 } from "lucide-react";
 import icon from "../../assets/jb-corporation-icon.png";
 import logo from "../../assets/jb-corporation-logo.png";
@@ -56,6 +58,14 @@ function CrmSidebar({
           >
             <Package aria-hidden="true" size={19} strokeWidth={1.8} />
             Products
+          </button>
+        )}
+        <button className={activeSection === "customers" ? "active" : ""} data-tooltip="Customers" type="button" onClick={() => onNavigate("customers")}>
+          <UsersRound aria-hidden="true" size={19} strokeWidth={1.8} /> Customers
+        </button>
+        {isAdmin && (
+          <button className={activeSection === "settings" ? "active" : ""} data-tooltip="Settings" type="button" onClick={() => onNavigate("settings")}>
+            <Settings aria-hidden="true" size={19} strokeWidth={1.8} /> Settings
           </button>
         )}
         {isAdmin && (

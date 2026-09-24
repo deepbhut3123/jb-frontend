@@ -21,6 +21,8 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  pricingSettings: (token) => request('/api/pricing-settings', { headers: { Authorization: `Bearer ${token}` } }),
+  savePricingSettings: (token, body) => request('/api/pricing-settings', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   whatsappSettings: (token) => request('/api/whatsapp/settings', { headers: { Authorization: `Bearer ${token}` } }),
   saveWhatsAppSettings: (token, body) => request('/api/whatsapp/settings', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   whatsappStatus: (token) => request('/api/whatsapp/status', { headers: { Authorization: `Bearer ${token}` } }),

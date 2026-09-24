@@ -70,7 +70,10 @@ function LeadDropdown({ value, options, placeholder, onChange, showStatusIndicat
       disabled={disabled}
       open={open}
       onOpenChange={setOpen}
-      onChange={onChange}
+      onChange={(nextValue) => {
+        setOpen(false);
+        onChange(nextValue);
+      }}
       options={options.map((option) => ({ value: option, label: option }))}
       labelRender={(option) => (
         <span
