@@ -12,8 +12,10 @@ import LeadsPanel from './pages/LeadsWorkspace.jsx';
 import QuotationsPanel from './pages/QuotationsWorkspace.jsx';
 import UsersPanel from './pages/UsersWorkspace.jsx';
 import WhatsAppWorkspace from './pages/WhatsAppWorkspace.jsx';
+import PricingSettingsWorkspace from './pages/PricingSettingsWorkspace.jsx';
+import CustomersWorkspace from './pages/CustomersWorkspace.jsx';
 
-const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', categories: '/categories', products: '/products', users: '/users', whatsapp: '/whatsapp' };
+const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', categories: '/categories', products: '/products', users: '/users', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers' };
 
 function CrmWorkspace({ section = 'dashboard' }) {
   const session = getSession();
@@ -53,7 +55,7 @@ function CrmWorkspace({ section = 'dashboard' }) {
     api.leadOptions(session.token).then((response) => setLeadOptions(response.options || [])).catch((error) => toast.error(error.message));
   }, [section, session.token]);
   useEffect(() => {
-    if (section !== 'quotations') return;
+    if (!['quotations', 'customers'].includes(section)) return;
     api.leads(session.token, { limit: 100 }).then((response) => setLeads(response.leads || [])).catch((error) => toast.error(error.message));
   }, [section, session.token]);
   useEffect(() => {
@@ -71,7 +73,9 @@ function CrmWorkspace({ section = 'dashboard' }) {
       <header className="crm-header"><div className="header-title"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setSidebarCollapsed((current) => !current)}><Menu size={18} strokeWidth={1.8} /></button><div><h2>Internal CRM</h2></div></div><div className="header-role"><ShieldCheck size={16} /><span>{isAdmin ? 'Admin' : 'User'}</span></div></header>
       <div className="crm-content">
         <ModuleLoading key={section} section={section} token={session.token}>
-        {section === 'whatsapp' ? <WhatsAppWorkspace token={session.token} />
+        {section === 'customers' ? <CustomersWorkspace leads={leads} setLeads={setLeads} token={session.token} />
+          : section === 'settings' ? <PricingSettingsWorkspace token={session.token} />
+          : section === 'whatsapp' ? <WhatsAppWorkspace token={session.token} />
           : section === 'users' ? <UsersPanel users={users} setUsers={setUsers} token={session.token} />
           : section === 'leads' ? <LeadsPanel leads={leads} setLeads={setLeads} isAdmin={isAdmin} users={users} token={session.token} currentUser={session.user} leadOptions={leadOptions} setLeadOptions={setLeadOptions} />
             : section === 'products' ? <ProductMasterPanel products={products} setProducts={setProducts} categories={categories} token={session.token} />

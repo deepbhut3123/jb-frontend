@@ -10,6 +10,8 @@ const moduleRequests = {
   products: ['api/products', 'api/categories'],
   categories: ['api/categories'],
   quotations: ['api/quotations', 'api/products'],
+  settings: ['api/pricing-settings'],
+  customers: ['api/leads'],
 };
 
 function SkeletonBlock({ className = '' }) {

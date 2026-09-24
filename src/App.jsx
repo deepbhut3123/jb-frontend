@@ -7,6 +7,8 @@ import CategoriesPage from './pages/CategoriesPage.jsx';
 import QuotationsPage from './pages/QuotationsPage.jsx';
 import UsersPage from './pages/UsersPage.jsx';
 import WhatsAppPage from './pages/WhatsAppPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
+import CustomersPage from './pages/CustomersPage.jsx';
 import { getSession } from './services/api.js';
 import { navigate } from './utils/navigation.js';
 
@@ -18,6 +20,8 @@ const protectedRoutes = {
   '/categories': { page: CategoriesPage, adminOnly: true },
   '/quotations': { page: QuotationsPage },
   '/whatsapp': { page: WhatsAppPage, adminOnly: true },
+  '/settings': { page: SettingsPage, adminOnly: true },
+  '/customers': { page: CustomersPage },
 };
 
 function currentPath() { return window.location.pathname.replace(/\/$/, '') || '/'; }

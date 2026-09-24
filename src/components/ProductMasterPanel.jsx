@@ -5,12 +5,12 @@ import { toast } from 'react-toastify';
 import { API_URL, api } from '../services/api.js';
 import { exportProductsCsv, importProductsCsv } from '../utils/productCsv.js';
 
-const emptyProduct = { partCode: '', description: '', hsnCode: '', brand: '', category: '', subCategory: '', subSubCategory: '', image: '', taxRate: 18, mrp: '', isActive: true };
+const emptyProduct = { partCode: '', description: '', hsnCode: '', brand: '', category: '', subCategory: '', subSubCategory: '', image: '', taxRate: 18, mrp: '', dollarAmount: '', marginPercent: '', isActive: true };
 const taxOptions = [0, 5, 12, 18, 28].map((value) => ({ value, label: `${value}% GST` }));
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
-const editableFields = ['partCode', 'description', 'brand', 'category', 'subCategory', 'subSubCategory', 'hsnCode', 'taxRate', 'mrp'];
+const editableFields = ['partCode', 'description', 'brand', 'category', 'subCategory', 'subSubCategory', 'hsnCode', 'taxRate', 'mrp', 'dollarAmount', 'marginPercent'];
 function productDraft(product) {
-  return { partCode: product.partCode || product.code || '', description: product.description || product.name || '', brand: product.brand || '', category: product.category || '', subCategory: product.subCategory || '', subSubCategory: product.subSubCategory || '', hsnCode: product.hsnCode || '', taxRate: product.taxRate ?? 18, mrp: product.mrp ?? product.salePrice ?? '' };
+  return { partCode: product.partCode || product.code || '', description: product.description || product.name || '', brand: product.brand || '', category: product.category || '', subCategory: product.subCategory || '', subSubCategory: product.subSubCategory || '', hsnCode: product.hsnCode || '', taxRate: product.taxRate ?? 18, mrp: product.mrp ?? product.salePrice ?? '', dollarAmount: product.dollarAmount ?? '', marginPercent: product.marginPercent ?? '' };
 }
 function productImageUrl(image) {
   if (!image) return '';
@@ -38,10 +38,14 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+  const [pricingSettings, setPricingSettings] = useState({ dollarRate: 1, multiplier: 1 });
   useEffect(() => {
     const params = { page, limit: 10, status: status === 'all' ? undefined : status, search: search.trim() };
     api.products(token, params).then((response) => { setProducts(response.products || []); setPagination(response.pagination || { page, total: response.products?.length || 0, totalPages: 1 }); }).catch((error) => toast.error(error.message));
   }, [page, search, setProducts, status, token]);
+  useEffect(() => {
+    api.pricingSettings(token).then((response) => setPricingSettings(response.settings || { dollarRate: 1, multiplier: 1 })).catch((error) => toast.error(error.message));
+  }, [token]);
   useEffect(() => {
     if (!imageFile) { setImagePreview(productImageUrl(form.image)); return undefined; }
     const previewUrl = URL.createObjectURL(imageFile);
@@ -209,7 +213,7 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     onClick: handleFileAction,
   };
   function openCreate() { setForm({ ...emptyProduct }); setImageFile(null); setDialog({ mode: 'create' }); }
-  function openEdit(product) { setForm({ partCode: product.partCode || product.code || '', description: product.description || product.name || '', hsnCode: product.hsnCode || '', brand: product.brand || '', category: product.category || '', subCategory: product.subCategory || '', subSubCategory: product.subSubCategory || '', image: product.image || '', taxRate: product.taxRate ?? 18, mrp: product.mrp ?? product.salePrice ?? '', isActive: product.isActive !== false }); setImageFile(null); setDialog({ mode: 'edit', product }); }
+  function openEdit(product) { setForm({ ...productDraft(product), image: product.image || '', isActive: product.isActive !== false }); setImageFile(null); setDialog({ mode: 'edit', product }); }
   function chooseImage(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -219,12 +223,12 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   }
   async function submitProduct(event) {
     event.preventDefault();
-    if (!form.partCode.trim() || !form.description.trim() || !form.category.trim() || form.mrp === '') { toast.error('Part code, description, category, and MRP are required.'); return; }
+    if (!form.partCode.trim() || !form.description.trim() || !form.category.trim() || (form.dollarAmount === '' && form.mrp === '')) { toast.error('Part code, description, category, and a price are required.'); return; }
     setSaving(true);
     try {
       const mode = dialog.mode;
       const payload = new FormData();
-      Object.entries(form).forEach(([key, value]) => { if (value !== undefined && value !== null) payload.append(key, String(value)); });
+      Object.entries({ ...form, mrp: calculatedRate }).forEach(([key, value]) => { if (value !== undefined && value !== null) payload.append(key, String(value)); });
       if (imageFile) payload.set('image', imageFile);
       const result = mode === 'create' ? await api.createProduct(token, payload) : await api.updateProduct(token, dialog.product._id, payload);
       setProducts((current) => mode === 'create' ? [result.product, ...current.filter((product) => String(product._id) !== String(result.product._id))] : current.map((product) => String(product._id) === String(result.product._id) ? result.product : product));
@@ -232,12 +236,13 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     } catch (error) { toast.error(error.message); } finally { setSaving(false); }
   }
   async function deleteProduct() { setSaving(true); try { await api.deleteProduct(token, dialog.product._id); setProducts((current) => current.filter((product) => product._id !== dialog.product._id)); setDialog(null); toast.success('Product deleted successfully.'); } catch (error) { toast.error(error.message); } finally { setSaving(false); } }
-  const field = (key, label, props = {}) => <label>{label}<input {...props} value={form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} /></label>;
+  const calculatedRate = Number.isFinite(Number(form.dollarAmount)) && Number.isFinite(Number(form.marginPercent)) && Number.isFinite(Number(pricingSettings.dollarRate)) && Number.isFinite(Number(pricingSettings.multiplier)) ? (Number(form.dollarAmount) * Number(pricingSettings.dollarRate) * (1 + Number(form.marginPercent) / 100) * Number(pricingSettings.multiplier)).toFixed(2) : '0.00';
+  const field = (key, label, props = {}) => <>{<label>{label}<input {...props} disabled={key === 'mrp'} readOnly={key === 'mrp'} value={key === 'mrp' ? calculatedRate : form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} /></label>}{key === 'description' && <><label>Dollar amount (USD) *<input required min="0" step="any" inputMode="decimal" type="number" value={form.dollarAmount} onChange={(event) => setForm({ ...form, dollarAmount: event.target.value })} placeholder="0.00" /></label><label>Margin percentage *<input required min="0" step="any" inputMode="decimal" type="number" value={form.marginPercent} onChange={(event) => setForm({ ...form, marginPercent: event.target.value })} placeholder="0" /></label></>}</>;
   return <div className="crm-content-inner product-master-page">
     <div className="section-heading"><div><h1>Products</h1><p>Maintain the product catalogue used across the CRM.</p></div><div className="product-heading-actions"><input ref={importInput} type="file" accept=".csv,text/csv" className="product-import-input" aria-label="Choose product CSV file" onChange={selectImportFile} />{bulkEditing ? <><button className="secondary-action" type="button" disabled={saving} onClick={cancelBulkEdit}>Cancel</button><button className="primary-action" type="button" disabled={saving} onClick={saveBulkEdit}><Save size={17} />{saving ? 'Saving…' : 'Save changes'}</button></> : <><Dropdown menu={fileMenu} trigger={['click']} placement="bottomRight" overlayClassName="product-file-menu"><button className="secondary-action product-files-button" type="button" disabled={importing || exporting}><FileDown size={17} />Import / export<ChevronDown size={15} /></button></Dropdown><button className="secondary-action" type="button" disabled={!filteredProducts.length} onClick={startBulkEdit}><Edit3 size={17} />Bulk edit</button><button className="primary-action" type="button" onClick={openCreate}><Plus size={17} />Add product</button></>}</div></div>
     <div className="product-toolbar"><div className="user-tabs product-status-tabs"><button className={status === 'all' ? 'active' : ''} type="button" disabled={bulkEditing} onClick={() => { setStatus('all'); setPage(1); }}>All products</button><button className={status === 'active' ? 'active' : ''} type="button" disabled={bulkEditing} onClick={() => { setStatus('active'); setPage(1); }}>Active</button><button className={status === 'inactive' ? 'active' : ''} type="button" disabled={bulkEditing} onClick={() => { setStatus('inactive'); setPage(1); }}>Inactive</button></div><label className="user-search"><Search size={16} /><input value={search} disabled={bulkEditing} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search part code, description, brand" /></label></div>
     {bulkEditing && <p className="product-bulk-hint">Editing {displayedProducts.length} product{displayedProducts.length === 1 ? '' : 's'} on this page. Save changes before changing pages or filters.</p>}
-    <div className="product-table-wrap"><table className={`product-table${bulkEditing ? ' bulk-editing' : ''}`}><thead><tr><th>Image</th><th>Part Code</th><th>Description</th><th>Brand</th><th>Category</th><th>Sub category</th><th>Sub-sub category</th><th>HSN Code</th><th>GST</th><th>MRP</th>{!bulkEditing && <th className="actions-heading">Actions</th>}</tr></thead><tbody>{displayedProducts.length ? displayedProducts.map((product) => {
+    <div className="product-table-wrap"><table className={`product-table${bulkEditing ? ' bulk-editing' : ''}`}><thead><tr><th>Image</th><th>Part Code</th><th>Description</th><th>Brand</th><th>Category</th><th>Sub category</th><th>Sub-sub category</th><th>HSN Code</th><th>GST</th><th>Final rate</th>{!bulkEditing && <th className="actions-heading">Actions</th>}</tr></thead><tbody>{displayedProducts.length ? displayedProducts.map((product) => {
       const draft = bulkDrafts[product._id];
       const rowCategory = categories.find((category) => category.name === draft?.category);
       const rowCategories = categories.map((category) => ({ value: category.name, label: category.name }));
