@@ -16,7 +16,7 @@ function formatExportDate(value) {
   return [String(date.getDate()).padStart(2, '0'), String(date.getMonth() + 1).padStart(2, '0'), date.getFullYear()].join('/');
 }
 
-function ExportLeadsButton() {
+function ExportLeadsButton({ section = 'leads' }) {
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
@@ -195,6 +195,7 @@ function ExportLeadsButton() {
     }
   }
 
+  if (section !== 'leads') return null;
   return (
     <>
       <div className="lead-selection-actions">

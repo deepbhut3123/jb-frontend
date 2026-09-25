@@ -1,27 +1,20 @@
 import { useEffect, useState } from 'react';
 import AuthPage from './pages/AuthPage.jsx';
-import DashboardPage from './pages/DashboardPage.jsx';
-import LeadsPage from './pages/LeadsPage.jsx';
-import ProductsPage from './pages/ProductsPage.jsx';
-import CategoriesPage from './pages/CategoriesPage.jsx';
-import QuotationsPage from './pages/QuotationsPage.jsx';
-import UsersPage from './pages/UsersPage.jsx';
-import WhatsAppPage from './pages/WhatsAppPage.jsx';
-import SettingsPage from './pages/SettingsPage.jsx';
-import CustomersPage from './pages/CustomersPage.jsx';
+import ExportLeadsButton from './components/ExportLeadsButton.jsx';
+import CrmWorkspace from './features/crm/CrmWorkspace.jsx';
 import { getSession } from './services/api.js';
 import { navigate } from './utils/navigation.js';
 
 const protectedRoutes = {
-  '/dashboard': { page: DashboardPage },
-  '/leads': { page: LeadsPage },
-  '/users': { page: UsersPage, adminOnly: true },
-  '/products': { page: ProductsPage, adminOnly: true },
-  '/categories': { page: CategoriesPage, adminOnly: true },
-  '/quotations': { page: QuotationsPage },
-  '/whatsapp': { page: WhatsAppPage, adminOnly: true },
-  '/settings': { page: SettingsPage, adminOnly: true },
-  '/customers': { page: CustomersPage },
+  '/dashboard': { section: 'dashboard' },
+  '/leads': { section: 'leads' },
+  '/users': { section: 'users', adminOnly: true },
+  '/products': { section: 'products', adminOnly: true },
+  '/categories': { section: 'categories', adminOnly: true },
+  '/quotations': { section: 'quotations' },
+  '/whatsapp': { section: 'whatsapp', adminOnly: true },
+  '/settings': { section: 'settings', adminOnly: true },
+  '/customers': { section: 'customers' },
 };
 
 function currentPath() { return window.location.pathname.replace(/\/$/, '') || '/'; }
@@ -34,8 +27,7 @@ function App() {
     const session = getSession();
     if (!session) return <RedirectToLogin />;
     if (route.adminOnly && ![1, 3].includes(session.user.role)) return <RedirectToDashboard />;
-    const RoutePage = route.page;
-    return <RoutePage />;
+    return <><ExportLeadsButton section={route.section} /><CrmWorkspace section={route.section} /></>;
   }
   if (path === '/register') return <AuthPage mode="register" />;
   if (path === '/forgot-password') return <AuthPage mode="forgot" />;

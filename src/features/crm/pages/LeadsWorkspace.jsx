@@ -70,9 +70,9 @@ function LeadOptionManager({ type, label, options, token, onClose, onChanged }) 
 }
 
 function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadOptions, setLeadOptions }) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("lookup") || "");
   const [status, setStatus] = useState("All");
-  const [dateRange, setDateRange] = useState("month");
+  const [dateRange, setDateRange] = useState(() => new URLSearchParams(window.location.search).has("highlight") ? "all" : "month");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const [dialog, setDialog] = useState(null);
@@ -560,6 +560,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
                 <tr
                   key={lead._id}
                   data-lead-id={lead._id}
+                  data-record-id={lead._id}
                   onClick={() => setDialog({ mode: "details", lead })}
                 >
                   <td>
