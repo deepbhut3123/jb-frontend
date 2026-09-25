@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Select } from "antd";
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
-import { CopyPlus, Download, Edit3, Mail, Phone, Plus, Search, Trash2, X } from "lucide-react";
+import { CopyPlus, Download, Edit3, LoaderCircle, Mail, Phone, Plus, Search, Trash2, X } from "lucide-react";
 import { api } from "../../../services/api.js";
 import { AntDatePicker, LeadDropdown, PhoneLink } from "../CrmControls.jsx";
 import { formatDisplayDate } from "../CrmUtils.jsx";
@@ -57,10 +57,12 @@ function revisionChanges(current, previous) {
 function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, products }) {
   const [dialog, setDialog] = useState(null);
   const [filter, setFilter] = useState("All");
-  const [dateRange, setDateRange] = useState("month");
+  const [dateRange, setDateRange] = useState(() => new URLSearchParams(window.location.search).has("highlight") ? "all" : "month");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("lookup") || "");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [searching, setSearching] = useState(false);
   const [pendingStatuses, setPendingStatuses] = useState({});
   const [pendingDownloads, setPendingDownloads] = useState({});
   const [form, setForm] = useState(emptyForm);
@@ -91,6 +93,11 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
   }, [filter, quotationGroups]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
     const params = { page, limit: 10 };
     if (dateRange !== "all") {
       if (dateRange === "month") { params.dateFrom = dayjs().startOf("month").format("YYYY-MM-DD"); params.dateTo = dayjs().add(1, "month").startOf("month").format("YYYY-MM-DD"); }
@@ -99,9 +106,16 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
       else if (dateRange === "today") { params.dateFrom = dayjs().format("YYYY-MM-DD"); params.dateTo = dayjs().add(1, "day").format("YYYY-MM-DD"); }
       else { params.dateFrom = dayjs().subtract(Number(dateRange) - 1, "day").format("YYYY-MM-DD"); params.dateTo = dayjs().add(1, "day").format("YYYY-MM-DD"); }
     }
-    if (search.trim()) params.search = search.trim();
-    api.quotations(token, params).then((response) => { setQuotations(response.quotations || []); setPagination(response.pagination || { total: response.quotations?.length || 0, totalPages: 1 }); }).catch((error) => toast.error(error.message));
-  }, [dateRange, page, search, setQuotations, token]);
+    if (debouncedSearch) params.search = debouncedSearch;
+    let active = true;
+    setSearching(true);
+    api.quotations(token, params, { background: true }).then((response) => {
+      if (!active) return;
+      setQuotations(response.quotations || []);
+      setPagination(response.pagination || { total: response.quotations?.length || 0, totalPages: 1 });
+    }).catch((error) => active && toast.error(error.message)).finally(() => active && setSearching(false));
+    return () => { active = false; };
+  }, [dateRange, debouncedSearch, page, setQuotations, token]);
   function commitQuotations(updater) {
     setQuotations((current) => {
       const next = typeof updater === "function" ? updater(current) : updater;
@@ -300,7 +314,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
         <div className="quotation-filter-tabs">
           {["All", ...quotationStatuses, "Revised"].map((item) => <button className={filter === item ? "active" : ""} type="button" key={item} onClick={() => setFilter(item)}>{item}</button>)}
         </div>
-        <label className="user-search quotation-search"><Search size={16} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search quotations" /></label>
+        <label className="user-search quotation-search"><Search size={16} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search quotations" />{searching && <LoaderCircle className="quotation-search-spinner" size={15} aria-label="Searching" />}</label>
         <label className="lead-date-filter"><span>Date</span><Select className="antd-crm-select quotation-date-select" value={dateRange} showSearch optionFilterProp="label" onChange={(value) => { setDateRange(value); setPage(1); }} options={[{ value: "month", label: "Current month" }, { value: "lastMonth", label: "Last month" }, { value: "lastYear", label: "Last year" }, { value: "today", label: "Today" }, { value: "7", label: "Last 7 days" }, { value: "30", label: "Last 30 days" }, { value: "all", label: "All time" }]} /></label>
       </div>
       <div className="quotation-table-wrap">
@@ -308,7 +322,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
           <thead><tr><th>Company</th><th>Version</th><th>Person</th><th>Minimum price</th><th>Amount</th><th>Status</th><th>Quotation date</th><th>Created by</th><th className="actions-heading">Actions</th></tr></thead>
           <tbody>
             {visibleQuotationGroups.length ? visibleQuotationGroups.map((group) => { const quotation = group.latest; return (
-              <tr className="quotation-row" key={group.rootId} onClick={() => setDialog({ mode: "history", group })}>
+              <tr className="quotation-row" key={group.rootId} data-record-id={group.rootId} onClick={() => setDialog({ mode: "history", group })}>
                 <td><strong>{quotation.company || "No company"}</strong><small>{quotation.contactName || "No person selected"}</small>{quotation.items?.length ? <div className="quotation-table-products">{quotation.items.map((item, itemIndex) => <small key={`${item.productId}-${itemIndex}`} title={quotationItemDescription(item)}>{quotationItemValue(item, productById)} × {item.quantity}</small>)}</div> : <small>No products</small>}</td>
                 <td><div className="quotation-version-cell">{Number(quotation.revisionNumber) > 0 ? <span className="quotation-revision-badge">Revision {quotation.revisionNumber}</span> : <span className="quotation-original-badge">Original</span>}<small>{group.revisions.length} version{group.revisions.length === 1 ? "" : "s"}</small></div></td>
                 <td><div className="quotation-contact"><span className={!quotation.email ? "is-empty" : ""}><Mail size={14} />{quotation.email || "No email"}</span><span className={!quotation.phone ? "is-empty" : ""}><Phone size={14} /><PhoneLink phone={quotation.phone} /></span></div></td>

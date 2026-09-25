@@ -4,14 +4,15 @@ const configuredApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 export const API_URL = `${configuredApiUrl.replace(/\/+$/, '')}/`;
 
 async function request(path, options = {}) {
+  const { background = false, ...fetchOptions } = options;
   const apiPath = path.replace(/^\/+/, '');
-  const finishLoading = (options.method || 'GET') === 'GET' && !apiPath.startsWith('api/auth/')
-    ? trackDataRequest(apiPath, options.headers?.Authorization)
+  const finishLoading = !background && (fetchOptions.method || 'GET') === 'GET' && !apiPath.startsWith('api/auth/') && !apiPath.startsWith('api/search')
+    ? trackDataRequest(apiPath, fetchOptions.headers?.Authorization)
     : null;
   try {
-    const isMultipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const isMultipart = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
     const requestUrl = new URL(apiPath, API_URL).toString();
-    const response = await fetch(requestUrl, { cache: 'no-store', ...options, headers: { ...(isMultipart ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) } });
+    const response = await fetch(requestUrl, { cache: 'no-store', ...fetchOptions, headers: { ...(isMultipart ? {} : { 'Content-Type': 'application/json' }), ...(fetchOptions.headers || {}) } });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Request failed.');
     return data;
@@ -21,6 +22,7 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  globalSearch: (token, query) => request(`/api/search?q=${encodeURIComponent(query)}`, { headers: { Authorization: `Bearer ${token}` } }),
   pricingSettings: (token) => request('/api/pricing-settings', { headers: { Authorization: `Bearer ${token}` } }),
   savePricingSettings: (token, body) => request('/api/pricing-settings', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   whatsappSettings: (token) => request('/api/whatsapp/settings', { headers: { Authorization: `Bearer ${token}` } }),
@@ -70,9 +72,9 @@ export const api = {
   createSubSubCategory: (token, categoryId, subCategoryId, body) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}/subsubcategories`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateSubSubCategory: (token, categoryId, subCategoryId, subSubCategoryId, body) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}/subsubcategories/${subSubCategoryId}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   deleteSubSubCategory: (token, categoryId, subCategoryId, subSubCategoryId) => request(`/api/categories/${categoryId}/subcategories/${subCategoryId}/subsubcategories/${subSubCategoryId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }),
-  quotations: (token, params = {}) => {
+  quotations: (token, params = {}, options = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
-    return request(`/api/quotations${query ? `?${query}` : ''}`, { headers: { Authorization: `Bearer ${token}` } });
+    return request(`/api/quotations${query ? `?${query}` : ''}`, { ...options, headers: { Authorization: `Bearer ${token}` } });
   },
   createQuotation: (token, body) => request('/api/quotations', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateQuotation: (token, id, body) => request(`/api/quotations/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),

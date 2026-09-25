@@ -7,7 +7,7 @@ const categoryIcons = [Folder, Boxes, Tag, Layers3, FolderTree, Archive, Atom, A
 function categoryIconIndex(category) { return [...String(category._id || category.name)].reduce((total, character) => total + character.charCodeAt(0), 0) % categoryIcons.length; }
 
 function CategoryMasterPanel({ categories, setCategories, token }) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('lookup') || '');
   const [dialog, setDialog] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState(null);
   const [categoryName, setCategoryName] = useState('');
@@ -122,7 +122,7 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
       const isCollapsed = collapsedCategories.has(category._id);
       const iconIndex = categoryIconIndex(category);
       const CategoryIcon = categoryIcons[iconIndex];
-      return <section className={`category-master-card${isCollapsed ? ' collapsed' : ''}`} key={category._id}>
+      return <section className={`category-master-card${isCollapsed ? ' collapsed' : ''}`} key={category._id} data-record-id={category._id}>
         <div className="category-master-heading"><button className="category-master-toggle" type="button" aria-expanded={!isCollapsed} onClick={() => toggleCategory(category._id)}><ChevronDown className="category-expand-icon" size={17} /><span className={`category-master-icon category-icon-${iconIndex % 10}`}><CategoryIcon size={17} /></span><div className="category-master-title"><small>Parent category</small><strong>{category.name}</strong><span>{category.subCategories.length} sub categor{category.subCategories.length === 1 ? 'y' : 'ies'}</span></div></button><div className="table-actions"><button className="secondary-action category-add-sub-action" type="button" title="Add sub categories" onClick={() => openSubCategoryDialog(category)}><Plus size={14} />Add sub category</button><button className="icon-action edit" type="button" title="Edit category" aria-label={`Edit ${category.name}`} onClick={() => openCategory('edit', category)}><Edit3 size={16} /></button><button className="icon-action delete" type="button" title="Delete category" aria-label={`Delete ${category.name}`} onClick={() => removeCategory(category)}><Trash2 size={16} /></button></div></div>
         {!isCollapsed && <div className="sub-category-section"><div className="sub-category-section-heading"><strong>Sub categories</strong><span>Group products down to three levels</span></div>{category.subCategories.length ? <div className="sub-category-list">{category.subCategories.map((subCategory) => <div className="sub-category-group" key={subCategory._id}>
           <div className="sub-category-row"><span>{subCategory.name}</span><div className="table-actions"><button className="secondary-action category-add-sub-action" type="button" title={`Add sub-sub category under ${subCategory.name}`} onClick={() => openSubSubCategoryDialog(category, subCategory)}><Plus size={14} />Add sub-sub category</button><button className="icon-action edit" type="button" title="Edit sub category" aria-label={`Edit ${subCategory.name}`} onClick={() => editSubCategory(category, subCategory)}><Edit3 size={15} /></button><button className="icon-action delete" type="button" title="Delete sub category" aria-label={`Delete ${subCategory.name}`} onClick={() => removeSubCategory(category, subCategory)}><Trash2 size={15} /></button></div></div>

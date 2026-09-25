@@ -22,7 +22,7 @@ function ProductSelect({ value, options, onChange, placeholder, disabled = false
 }
 
 function ProductMasterPanel({ products, setProducts, categories, token }) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('lookup') || '');
   const [status, setStatus] = useState('all');
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState(emptyProduct);
@@ -32,6 +32,8 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   const [bulkEditing, setBulkEditing] = useState(false);
   const [bulkDrafts, setBulkDrafts] = useState({});
   const [bulkOriginals, setBulkOriginals] = useState({});
+  const [bulkImages, setBulkImages] = useState({});
+  const bulkImagesRef = useRef({});
   const importInput = useRef(null);
   const [importPreview, setImportPreview] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -52,6 +54,9 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     setImagePreview(previewUrl);
     return () => URL.revokeObjectURL(previewUrl);
   }, [form.image, imageFile]);
+  useEffect(() => () => {
+    Object.values(bulkImagesRef.current).forEach((image) => URL.revokeObjectURL(image.previewUrl));
+  }, []);
   const filteredProducts = useMemo(() => products.filter((product) => {
     const matchesStatus = status === 'all' || (status === 'active' ? product.isActive !== false : product.isActive === false);
     const query = search.trim().toLowerCase();
@@ -77,17 +82,42 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     return options;
   }, [form.subSubCategory, selectedSubCategory]);
   function startBulkEdit() {
+    clearBulkImages();
     const drafts = Object.fromEntries(filteredProducts.map((product) => [product._id, productDraft(product)]));
     setBulkOriginals(drafts);
     setBulkDrafts(drafts);
     setBulkEditing(true);
   }
-  function cancelBulkEdit() { setBulkEditing(false); setBulkDrafts({}); setBulkOriginals({}); }
+  function clearBulkImages() {
+    Object.values(bulkImagesRef.current).forEach((image) => URL.revokeObjectURL(image.previewUrl));
+    bulkImagesRef.current = {};
+    setBulkImages({});
+  }
+  function cancelBulkEdit() { clearBulkImages(); setBulkEditing(false); setBulkDrafts({}); setBulkOriginals({}); }
+  function chooseBulkImage(product, event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please select an image file.'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be 5 MB or smaller.'); return; }
+    const existing = bulkImagesRef.current[product._id];
+    if (existing) URL.revokeObjectURL(existing.previewUrl);
+    const next = { ...bulkImagesRef.current, [product._id]: { file, previewUrl: URL.createObjectURL(file) } };
+    bulkImagesRef.current = next;
+    setBulkImages(next);
+  }
+  function removeBulkImage(product) {
+    const existing = bulkImagesRef.current[product._id];
+    if (existing?.previewUrl) URL.revokeObjectURL(existing.previewUrl);
+    const next = { ...bulkImagesRef.current, [product._id]: { file: null, previewUrl: '', remove: true } };
+    bulkImagesRef.current = next;
+    setBulkImages(next);
+  }
   function updateBulkDraft(id, changes) {
     setBulkDrafts((current) => ({ ...current, [id]: { ...current[id], ...changes } }));
   }
   async function saveBulkEdit() {
-    const changed = displayedProducts.filter((product) => editableFields.some((key) => String(bulkDrafts[product._id]?.[key] ?? '') !== String(bulkOriginals[product._id]?.[key] ?? '')));
+    const changed = displayedProducts.filter((product) => bulkImages[product._id] || editableFields.some((key) => String(bulkDrafts[product._id]?.[key] ?? '') !== String(bulkOriginals[product._id]?.[key] ?? '')));
     if (!changed.length) { cancelBulkEdit(); return; }
     for (const product of changed) {
       const draft = bulkDrafts[product._id];
@@ -98,13 +128,30 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     }
     setSaving(true);
     try {
-      const results = await Promise.allSettled(changed.map((product) => api.updateProduct(token, product._id, { ...bulkDrafts[product._id], name: bulkDrafts[product._id].description })));
+      const results = await Promise.allSettled(changed.map((product) => {
+        const draft = { ...bulkDrafts[product._id], name: bulkDrafts[product._id].description };
+        const imageChange = bulkImages[product._id];
+        const selectedImage = imageChange?.file;
+        if (imageChange?.remove) return api.updateProduct(token, product._id, { ...draft, image: '' });
+        if (!selectedImage) return api.updateProduct(token, product._id, draft);
+        const payload = new FormData();
+        Object.entries(draft).forEach(([key, value]) => { if (value !== undefined && value !== null) payload.append(key, String(value)); });
+        payload.set('image', selectedImage);
+        return api.updateProduct(token, product._id, payload);
+      }));
       const updated = results.filter((result) => result.status === 'fulfilled').map((result) => result.value.product);
       if (updated.length) {
         const byId = new Map(updated.map((product) => [String(product._id), product]));
         setProducts((current) => current.map((product) => byId.get(String(product._id)) || product));
         setBulkOriginals((current) => ({ ...current, ...Object.fromEntries(updated.map((product) => [product._id, productDraft(product)])) }));
         setBulkDrafts((current) => ({ ...current, ...Object.fromEntries(updated.map((product) => [product._id, productDraft(product)])) }));
+        const nextImages = { ...bulkImagesRef.current };
+        updated.forEach((product) => {
+          if (nextImages[product._id]) URL.revokeObjectURL(nextImages[product._id].previewUrl);
+          delete nextImages[product._id];
+        });
+        bulkImagesRef.current = nextImages;
+        setBulkImages(nextImages);
       }
       const failed = results.filter((result) => result.status === 'rejected');
       if (failed.length) {
@@ -221,6 +268,10 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     if (file.size > 5 * 1024 * 1024) { toast.error('Image must be 5 MB or smaller.'); event.target.value = ''; return; }
     setImageFile(file);
   }
+  function removeImage() {
+    setImageFile(null);
+    setForm((current) => ({ ...current, image: '' }));
+  }
   async function submitProduct(event) {
     event.preventDefault();
     if (!form.partCode.trim() || !form.description.trim() || !form.category.trim() || (form.dollarAmount === '' && form.mrp === '')) { toast.error('Part code, description, category, and a price are required.'); return; }
@@ -241,7 +292,7 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   return <div className="crm-content-inner product-master-page">
     <div className="section-heading"><div><h1>Products</h1><p>Maintain the product catalogue used across the CRM.</p></div><div className="product-heading-actions"><input ref={importInput} type="file" accept=".csv,text/csv" className="product-import-input" aria-label="Choose product CSV file" onChange={selectImportFile} />{bulkEditing ? <><button className="secondary-action" type="button" disabled={saving} onClick={cancelBulkEdit}>Cancel</button><button className="primary-action" type="button" disabled={saving} onClick={saveBulkEdit}><Save size={17} />{saving ? 'Saving…' : 'Save changes'}</button></> : <><Dropdown menu={fileMenu} trigger={['click']} placement="bottomRight" overlayClassName="product-file-menu"><button className="secondary-action product-files-button" type="button" disabled={importing || exporting}><FileDown size={17} />Import / export<ChevronDown size={15} /></button></Dropdown><button className="secondary-action" type="button" disabled={!filteredProducts.length} onClick={startBulkEdit}><Edit3 size={17} />Bulk edit</button><button className="primary-action" type="button" onClick={openCreate}><Plus size={17} />Add product</button></>}</div></div>
     <div className="product-toolbar"><div className="user-tabs product-status-tabs"><button className={status === 'all' ? 'active' : ''} type="button" disabled={bulkEditing} onClick={() => { setStatus('all'); setPage(1); }}>All products</button><button className={status === 'active' ? 'active' : ''} type="button" disabled={bulkEditing} onClick={() => { setStatus('active'); setPage(1); }}>Active</button><button className={status === 'inactive' ? 'active' : ''} type="button" disabled={bulkEditing} onClick={() => { setStatus('inactive'); setPage(1); }}>Inactive</button></div><label className="user-search"><Search size={16} /><input value={search} disabled={bulkEditing} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search part code, description, brand" /></label></div>
-    {bulkEditing && <p className="product-bulk-hint">Editing {displayedProducts.length} product{displayedProducts.length === 1 ? '' : 's'} on this page. Save changes before changing pages or filters.</p>}
+    {bulkEditing && <p className="product-bulk-hint">Editing {displayedProducts.length} product{displayedProducts.length === 1 ? '' : 's'} on this page. Click an image to replace it, then save changes before changing pages or filters.</p>}
     <div className="product-table-wrap"><table className={`product-table${bulkEditing ? ' bulk-editing' : ''}`}><thead><tr><th>Image</th><th>Part Code</th><th>Description</th><th>Brand</th><th>Category</th><th>Sub category</th><th>Sub-sub category</th><th>HSN Code</th><th>GST</th><th>Final rate</th>{!bulkEditing && <th className="actions-heading">Actions</th>}</tr></thead><tbody>{displayedProducts.length ? displayedProducts.map((product) => {
       const draft = bulkDrafts[product._id];
       const rowCategory = categories.find((category) => category.name === draft?.category);
@@ -252,11 +303,13 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
       const rowSubCategory = rowCategory?.subCategories?.find((item) => item.name === draft?.subCategory);
       const rowSubSubCategories = (rowSubCategory?.subSubCategories || []).map((item) => ({ value: item.name, label: item.name }));
       if (draft?.subSubCategory && !rowSubSubCategories.some((option) => option.value === draft.subSubCategory)) rowSubSubCategories.push({ value: draft.subSubCategory, label: `${draft.subSubCategory} (legacy)` });
-      return <tr key={product._id}><td><button className={`product-table-image${product.image ? ' clickable' : ''}`} type="button" disabled={!product.image} title={product.image ? 'Preview image' : 'No image uploaded'} onClick={() => product.image && setDialog({ mode: 'preview', product })}>{product.image ? <img src={productImageUrl(product.image)} alt={product.description || product.name || 'Product'} /> : <Package size={17} />}</button></td><td>{bulkEditing ? bulkInput(product, 'partCode', { maxLength: 40, required: true }) : <span className="product-code">{product.partCode || product.code || '—'}</span>}</td><td>{bulkEditing ? bulkInput(product, 'description', { maxLength: 1000, required: true }) : <div className="product-name-cell"><div><strong>{product.description || product.name || '—'}</strong></div></div>}</td><td>{bulkEditing ? bulkInput(product, 'brand', { maxLength: 80 }) : product.brand || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'category', rowCategories, 'Category') : product.category || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'subCategory', rowSubCategories, 'Sub category', { disabled: !draft?.category }) : product.subCategory || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'subSubCategory', rowSubSubCategories, 'Sub-sub category', { disabled: !draft?.subCategory }) : product.subSubCategory || '—'}</td><td>{bulkEditing ? bulkInput(product, 'hsnCode', { maxLength: 20 }) : product.hsnCode || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'taxRate', taxOptions, 'GST') : `${product.taxRate ?? 0}%`}</td><td>{bulkEditing ? bulkInput(product, 'mrp', { type: 'number', min: '0', step: '0.01', required: true }) : <strong className="selling-price">{currency.format(Number(product.mrp ?? product.salePrice ?? 0))}</strong>}</td>{!bulkEditing && <td><div className="table-actions"><button className="icon-action edit" type="button" title="Edit product" aria-label="Edit product" onClick={() => openEdit(product)}><Edit3 size={16} /></button><button className="icon-action delete" type="button" title="Delete product" aria-label="Delete product" onClick={() => setDialog({ mode: 'delete', product })}><Trash2 size={16} /></button></div></td>}</tr>;
+      const bulkImage = bulkImages[product._id];
+      const displayedImage = bulkImage?.remove ? '' : bulkImage?.previewUrl || productImageUrl(product.image);
+      return <tr key={product._id} data-record-id={product._id}><td>{bulkEditing ? <div className="product-bulk-image-control"><label className="product-bulk-image" title="Choose a new product image">{displayedImage ? <img src={displayedImage} alt={product.description || product.name || 'Product'} /> : <Package size={17} />}<span><Upload size={12} /></span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" aria-label={`Upload image for ${product.partCode || product.code || 'product'}`} onChange={(event) => chooseBulkImage(product, event)} /></label>{displayedImage && <button type="button" title="Remove product image" aria-label={`Remove image for ${product.partCode || product.code || 'product'}`} onClick={() => removeBulkImage(product)}><X size={12} /></button>}</div> : <button className={`product-table-image${product.image ? ' clickable' : ''}`} type="button" disabled={!product.image} title={product.image ? 'Preview image' : 'No image uploaded'} onClick={() => product.image && setDialog({ mode: 'preview', product })}>{product.image ? <img src={productImageUrl(product.image)} alt={product.description || product.name || 'Product'} /> : <Package size={17} />}</button>}</td><td>{bulkEditing ? bulkInput(product, 'partCode', { maxLength: 40, required: true }) : <span className="product-code">{product.partCode || product.code || '—'}</span>}</td><td>{bulkEditing ? bulkInput(product, 'description', { maxLength: 1000, required: true }) : <div className="product-name-cell"><div><strong>{product.description || product.name || '—'}</strong></div></div>}</td><td>{bulkEditing ? bulkInput(product, 'brand', { maxLength: 80 }) : product.brand || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'category', rowCategories, 'Category') : product.category || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'subCategory', rowSubCategories, 'Sub category', { disabled: !draft?.category }) : product.subCategory || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'subSubCategory', rowSubSubCategories, 'Sub-sub category', { disabled: !draft?.subCategory }) : product.subSubCategory || '—'}</td><td>{bulkEditing ? bulkInput(product, 'hsnCode', { maxLength: 20 }) : product.hsnCode || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'taxRate', taxOptions, 'GST') : `${product.taxRate ?? 0}%`}</td><td>{bulkEditing ? bulkInput(product, 'mrp', { type: 'number', min: '0', step: '0.01', required: true }) : <strong className="selling-price">{currency.format(Number(product.mrp ?? product.salePrice ?? 0))}</strong>}</td>{!bulkEditing && <td><div className="table-actions"><button className="icon-action edit" type="button" title="Edit product" aria-label="Edit product" onClick={() => openEdit(product)}><Edit3 size={16} /></button><button className="icon-action delete" type="button" title="Delete product" aria-label="Delete product" onClick={() => setDialog({ mode: 'delete', product })}><Trash2 size={16} /></button></div></td>}</tr>;
     }) : <tr><td className="empty-table" colSpan={bulkEditing ? 10 : 11}>No products match your filters.</td></tr>}</tbody></table></div>
     <div className="lead-pagination"><span>{pagination.total || 0} product{pagination.total === 1 ? '' : 's'}</span><div><button type="button" disabled={bulkEditing || page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</button><strong>Page {page} of {pagination.totalPages || 1}</strong><button type="button" disabled={bulkEditing || page >= (pagination.totalPages || 1)} onClick={() => setPage((current) => current + 1)}>Next</button></div></div>
     {importPreview && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !importing && setImportPreview(null)}><div className="confirm-modal product-import-modal" role="dialog" aria-modal="true" aria-labelledby="product-import-title"><div className="modal-heading"><div><span className="dashboard-kicker">Product catalogue</span><h2 id="product-import-title">Import products</h2></div><button className="modal-close" type="button" disabled={importing} aria-label="Close import preview" onClick={() => setImportPreview(null)}><X size={18} /></button></div><p><strong>{importPreview.fileName}</strong></p>{importPreview.result ? <><p>{importPreview.result.created} created, {importPreview.result.updated} updated; {importPreview.result.failures.length} failed.</p>{importPreview.result.failures.length > 0 && <ul className="product-import-errors">{importPreview.result.failures.map((error) => <li key={error}>{error}</li>)}</ul>}</> : <><p>{importPreview.products.length} valid product{importPreview.products.length === 1 ? '' : 's'} ready to import. Existing Part Codes will be updated; new Part Codes will be created. Part Code, Description, Category, and MRP are required. GST Rate defaults to 18 and Active defaults to Yes when blank.</p>{importPreview.errors.length > 0 && <ul className="product-import-errors">{importPreview.errors.map((error) => <li key={error}>{error}</li>)}</ul>}{!importPreview.products.length && !importPreview.errors.length && <p>This file has only headers. Add product rows before importing.</p>}</>}<div className="modal-footer"><button className="secondary-action" type="button" disabled={importing} onClick={() => setImportPreview(null)}>{importPreview.result ? 'Close' : 'Cancel'}</button>{!importPreview.result && <button className="primary-action" type="button" disabled={importing || !!importPreview.errors.length || !importPreview.products.length} onClick={submitImport}>{importing ? 'Importing…' : `Import ${importPreview.products.length} products`}</button>}</div></div></div>}
-    {dialog && ['create', 'edit'].includes(dialog.mode) && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}><form className="user-modal product-modal" onSubmit={submitProduct}><div className="modal-heading"><div><span className="dashboard-kicker">Product catalogue</span><h2>{dialog.mode === 'create' ? 'Add a new product' : 'Edit product details'}</h2></div><button className="modal-close" type="button" aria-label="Close" onClick={() => setDialog(null)}><X size={18} /></button></div><div className="product-image-upload"><div className="product-image-preview">{imagePreview ? <img src={imagePreview} alt="Product preview" /> : <Package size={28} />}</div><label className="secondary-action product-image-button"><Plus size={15} />{imageFile ? 'Change image' : 'Upload image'}<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={chooseImage} /></label><small>PNG, JPG, WEBP or GIF · maximum 5 MB</small></div><div className="modal-fields product-fields">
+    {dialog && ['create', 'edit'].includes(dialog.mode) && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}><form className="user-modal product-modal" onSubmit={submitProduct}><div className="modal-heading"><div><span className="dashboard-kicker">Product catalogue</span><h2>{dialog.mode === 'create' ? 'Add a new product' : 'Edit product details'}</h2></div><button className="modal-close" type="button" aria-label="Close" onClick={() => setDialog(null)}><X size={18} /></button></div><div className="product-image-upload"><div className="product-image-preview">{imagePreview ? <img src={imagePreview} alt="Product preview" /> : <Package size={28} />}</div><div className="product-image-actions"><label className="secondary-action product-image-button"><Plus size={15} />{imageFile || form.image ? 'Change image' : 'Upload image'}<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={chooseImage} /></label>{imagePreview && <button className="secondary-action product-image-remove" type="button" onClick={removeImage}><Trash2 size={15} />Remove image</button>}</div><small>PNG, JPG, WEBP or GIF · maximum 5 MB</small></div><div className="modal-fields product-fields">
       <label>Part Code *<input required maxLength="40" value={form.partCode} onChange={(event) => setForm({ ...form, partCode: event.target.value.toUpperCase() })} placeholder="Example: JB-001" /></label>
       {field('description', 'Desc *', { required: true, maxLength: 1000, placeholder: 'Enter product description' })}{field('hsnCode', 'HSN Code', { maxLength: 20, placeholder: 'Enter HSN code' })}{field('brand', 'Brand', { maxLength: 80, placeholder: 'Enter brand' })}<label>Category *<ProductSelect value={form.category} options={categoryOptions} placeholder="Select category" onChange={(category) => setForm({ ...form, category, subCategory: '', subSubCategory: '' })} /></label><label>Sub category<ProductSelect value={form.subCategory} options={subCategoryOptions} placeholder={form.category ? 'Select sub category' : 'Select category first'} disabled={!form.category} onChange={(subCategory) => setForm({ ...form, subCategory, subSubCategory: '' })} /></label><label>Sub-sub category<ProductSelect value={form.subSubCategory} options={subSubCategoryOptions} placeholder={form.subCategory ? 'Select sub-sub category' : 'Select sub category first'} disabled={!form.subCategory} onChange={(subSubCategory) => setForm({ ...form, subSubCategory })} /></label><label>GST *<ProductSelect value={form.taxRate} options={taxOptions} onChange={(taxRate) => setForm({ ...form, taxRate })} /></label>{field('mrp', 'MRP (₹) *', { required: true, min: '0', step: '0.01', type: 'number', placeholder: '0.00' })}
     </div><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" disabled={saving} type="submit">{saving ? 'Saving…' : dialog.mode === 'create' ? 'Create product' : 'Save changes'}</button></div></form></div>}

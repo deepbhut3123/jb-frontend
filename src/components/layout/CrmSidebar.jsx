@@ -24,14 +24,16 @@ function CrmSidebar({
   activeSection,
   isAdmin,
   session,
-  collapsed,
   onNavigate,
   onLogout,
+  onExpand,
+  onCollapse,
 }) {
   return (
-    <aside className="crm-sidebar">
+    <aside className="crm-sidebar" onMouseEnter={onExpand} onMouseLeave={onCollapse} onFocus={onExpand} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) onCollapse(); }}>
       <div className="crm-brand">
-        <img src={collapsed ? icon : logo} alt="JB Corporation" />
+        <img className="crm-brand-full" src={logo} alt="JB Corporation" />
+        <img className="crm-brand-icon" src={icon} alt="" aria-hidden="true" />
       </div>
       <nav className="crm-navigation" aria-label="CRM navigation">
         {navigationItems.map((item) => {
@@ -45,7 +47,7 @@ function CrmSidebar({
               onClick={() => onNavigate(item.key)}
             >
               <MenuIcon aria-hidden="true" size={19} strokeWidth={1.8} />
-              {item.label}
+              <span className="sidebar-label">{item.label}</span>
             </button>
           );
         })}
@@ -57,15 +59,15 @@ function CrmSidebar({
             onClick={() => onNavigate("products")}
           >
             <Package aria-hidden="true" size={19} strokeWidth={1.8} />
-            Products
+            <span className="sidebar-label">Products</span>
           </button>
         )}
         <button className={activeSection === "customers" ? "active" : ""} data-tooltip="Customers" type="button" onClick={() => onNavigate("customers")}>
-          <UsersRound aria-hidden="true" size={19} strokeWidth={1.8} /> Customers
+          <UsersRound aria-hidden="true" size={19} strokeWidth={1.8} /><span className="sidebar-label">Customers</span>
         </button>
         {isAdmin && (
           <button className={activeSection === "settings" ? "active" : ""} data-tooltip="Settings" type="button" onClick={() => onNavigate("settings")}>
-            <Settings aria-hidden="true" size={19} strokeWidth={1.8} /> Settings
+            <Settings aria-hidden="true" size={19} strokeWidth={1.8} /><span className="sidebar-label">Settings</span>
           </button>
         )}
         {isAdmin && (
@@ -76,7 +78,7 @@ function CrmSidebar({
             onClick={() => onNavigate("categories")}
           >
             <FolderTree aria-hidden="true" size={19} strokeWidth={1.8} />
-            Categories
+            <span className="sidebar-label">Categories</span>
           </button>
         )}
         {isAdmin && (
@@ -87,7 +89,7 @@ function CrmSidebar({
             onClick={() => onNavigate("users")}
           >
             <UserRound aria-hidden="true" size={19} strokeWidth={1.8} />
-            User Management
+            <span className="sidebar-label">User Management</span>
           </button>
         )}
       </nav>

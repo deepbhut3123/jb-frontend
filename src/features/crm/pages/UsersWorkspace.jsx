@@ -7,7 +7,7 @@ import { formatDisplayDate } from "../CrmUtils.jsx";
 
 function UsersPanel({ users, setUsers, token }) {
   const [tab, setTab] = useState("all");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("lookup") || "");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
   const [dialog, setDialog] = useState(null);
@@ -153,7 +153,7 @@ function UsersPanel({ users, setUsers, token }) {
           <tbody>
             {filteredUsers.length ? (
               filteredUsers.map((user) => (
-                <tr key={user._id}>
+                <tr key={user._id} data-record-id={user._id}>
                   <td>
                     <div className="table-user">
                       <span>{user.name.slice(0, 1).toUpperCase()}</span>
