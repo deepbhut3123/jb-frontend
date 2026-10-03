@@ -15,6 +15,7 @@ const protectedRoutes = {
   '/whatsapp': { section: 'whatsapp', adminOnly: true },
   '/settings': { section: 'settings', adminOnly: true },
   '/customers': { section: 'customers' },
+  '/profile': { section: 'profile' },
 };
 
 function currentPath() { return window.location.pathname.replace(/\/$/, '') || '/'; }
