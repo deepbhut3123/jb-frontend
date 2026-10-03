@@ -6,7 +6,7 @@ import CrmSidebar from '../../components/layout/CrmSidebar.jsx';
 import ProductMasterPanel from '../../components/ProductMasterPanel.jsx';
 import ModuleLoading from '../../components/ModuleLoading.jsx';
 import GlobalSearch from '../../components/GlobalSearch.jsx';
-import { api, clearSession, getSession } from '../../services/api.js';
+import { api, clearSession, getSession, saveSession } from '../../services/api.js';
 import { navigate } from '../../utils/navigation.js';
 import DashboardOverview from './pages/DashboardWorkspace.jsx';
 import LeadsPanel from './pages/LeadsWorkspace.jsx';
@@ -15,12 +15,14 @@ import UsersPanel from './pages/UsersWorkspace.jsx';
 import WhatsAppWorkspace from './pages/WhatsAppWorkspace.jsx';
 import PricingSettingsWorkspace from './pages/PricingSettingsWorkspace.jsx';
 import CustomersWorkspace from './pages/CustomersWorkspace.jsx';
+import ProfileWorkspace from './pages/ProfileWorkspace.jsx';
 
-const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', categories: '/categories', products: '/products', users: '/users', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers' };
+const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', categories: '/categories', products: '/products', users: '/users', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers', profile: '/profile' };
 
 function CrmWorkspace({ section = 'dashboard' }) {
   const session = getSession();
   const isAdmin = [1, 3].includes(session.user.role);
+  const [currentUser, setCurrentUser] = useState(session.user);
   const [data, setData] = useState(null);
   const [users, setUsers] = useState([]);
   const [leads, setLeads] = useState([]);
@@ -92,6 +94,11 @@ function CrmWorkspace({ section = 'dashboard' }) {
   }, [contentVersion, section]);
 
   function logout() { clearSession(); toast.success('You have been signed out.'); navigate('/login'); }
+  function updateCurrentUser(user) {
+    const nextUser = { ...currentUser, ...user };
+    setCurrentUser(nextUser);
+    saveSession({ token: session.token, user: nextUser });
+  }
   function selectSection(nextSection) { if (window.innerWidth <= 900) setSidebarCollapsed(true); navigate(routePaths[nextSection] || routePaths.dashboard); }
   function expandSidebar() {
     window.clearTimeout(sidebarCollapseTimerRef.current);
@@ -109,13 +116,14 @@ function CrmWorkspace({ section = 'dashboard' }) {
   }
 
   return <main className={`crm-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-    <CrmSidebar activeSection={section} isAdmin={isAdmin} session={session} onNavigate={selectSection} onLogout={logout} onExpand={expandSidebar} onCollapse={collapseSidebar} />
+    <CrmSidebar activeSection={section} isAdmin={isAdmin} session={{ ...session, user: currentUser }} onNavigate={selectSection} onLogout={logout} onExpand={expandSidebar} onCollapse={collapseSidebar} />
     <button className="mobile-sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setSidebarCollapsed(true)} />
     <section className="crm-workspace">
       <header className="crm-header"><div className="header-title"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setSidebarCollapsed((current) => !current)}><Menu size={18} strokeWidth={1.8} /></button><div><h2>Internal CRM</h2></div></div>{section === 'dashboard' && <GlobalSearch token={session.token} onSelect={openGlobalResult} />}<div className="header-role"><ShieldCheck size={16} /><span>{isAdmin ? 'Admin' : 'User'}</span></div></header>
       <div className="crm-content">
         <ModuleLoading key={`${section}-${contentVersion}`} section={section} token={session.token}>
-        {section === 'customers' ? <CustomersWorkspace leads={leads} setLeads={setLeads} token={session.token} />
+        {section === 'profile' ? <ProfileWorkspace token={session.token} user={currentUser} onProfileUpdated={updateCurrentUser} />
+          : section === 'customers' ? <CustomersWorkspace leads={leads} setLeads={setLeads} token={session.token} />
           : section === 'settings' ? <PricingSettingsWorkspace token={session.token} />
           : section === 'whatsapp' ? <WhatsAppWorkspace token={session.token} />
           : section === 'users' ? <UsersPanel users={users} setUsers={setUsers} token={session.token} />

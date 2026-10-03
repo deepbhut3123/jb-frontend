@@ -110,14 +110,14 @@ function CrmSidebar({
         </nav>
       )} */}
       <div className="sidebar-user">
-        <div className="user-avatar">
-          {session.user.name.slice(0, 1).toUpperCase()}
-        </div>
-        <div>
-          <strong>{session.user.name}</strong>
-          <span>{isAdmin ? "Administrator" : "CRM user"}</span>
-        </div>
-        <button type="button" onClick={onLogout}>
+        <button className={`sidebar-profile-link${activeSection === "profile" ? " active" : ""}`} data-tooltip="Profile" type="button" onClick={() => onNavigate("profile")}>
+          <span className="user-avatar">{session.user.name.slice(0, 1).toUpperCase()}</span>
+          <span className="sidebar-profile-copy">
+            <strong>{session.user.name}</strong>
+            <span>{isAdmin ? "Administrator" : "CRM user"}</span>
+          </span>
+        </button>
+        <button className="sidebar-signout" type="button" onClick={onLogout}>
           <LogOut size={14} />
           Sign out
         </button>

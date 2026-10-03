@@ -39,6 +39,9 @@ export const api = {
   requestResetOtp: (body) => request('/api/auth/forgot-password/request', { method: 'POST', body: JSON.stringify(body) }),
   verifyResetOtp: (body) => request('/api/auth/forgot-password/verify-otp', { method: 'POST', body: JSON.stringify(body) }),
   resetPassword: (body) => request('/api/auth/forgot-password/reset', { method: 'POST', body: JSON.stringify(body) }),
+  profile: (token) => request('/api/profile', { headers: { Authorization: `Bearer ${token}` } }),
+  updateProfile: (token, body) => request('/api/profile', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
+  changePassword: (token, body) => request('/api/profile/password', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   dashboard: (token) => request('/api/dashboard/summary', { headers: { Authorization: `Bearer ${token}` } }),
   users: (token, params = {}) => { const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString(); return request(`/api/users${query ? `?${query}` : ''}`, { headers: { Authorization: `Bearer ${token}` } }); },
   leads: (token, params = {}) => {
