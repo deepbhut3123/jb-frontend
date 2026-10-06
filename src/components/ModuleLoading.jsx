@@ -46,15 +46,14 @@ export default function ModuleLoading({ section, token, children }) {
   const [showLoading, setShowLoading] = useState(true);
 
   useEffect(() => {
-    if (backendLoading) {
-      setShowLoading(true);
-      return undefined;
-    }
+    if (!showLoading || backendLoading) return undefined;
     const timeout = window.setTimeout(() => setShowLoading(false), loadingHoldMs);
     return () => window.clearTimeout(timeout);
-  }, [backendLoading]);
+  }, [backendLoading, showLoading]);
 
-  const loading = backendLoading || showLoading;
+  // A full skeleton is useful while a module first opens, but using it for
+  // background refreshes makes focused controls (especially search) lose focus.
+  const loading = showLoading;
 
   // Keep panels mounted so their fetches, filters, and open forms survive loading.
   return <div className={`module-loading${loading ? ' is-loading' : ''}`} aria-busy={loading}>

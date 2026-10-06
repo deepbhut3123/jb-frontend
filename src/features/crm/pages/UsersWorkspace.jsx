@@ -1,23 +1,39 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Select } from "antd";
 import { toast } from "react-toastify";
-import { Edit3, Plus, Search, ShieldCheck, Trash2, UserRound, X } from "lucide-react";
-import { api } from "../../../services/api.js";
-import { RoleDropdown } from "../CrmControls.jsx";
+import { Edit3, LoaderCircle, Plus, Search, ShieldCheck, Trash2, UserRound, X } from "lucide-react";
+import { api, getSession } from "../../../services/api.js";
+import { can, isAdministrator } from "../../../utils/permissions.js";
 import { formatDisplayDate } from "../CrmUtils.jsx";
 
 function UsersPanel({ users, setUsers, token }) {
+  const currentUser = getSession()?.user;
+  const canCreate = can(currentUser, 'users.create');
+  const canEdit = can(currentUser, 'users.edit');
+  const canDelete = can(currentUser, 'users.delete');
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("lookup") || "");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [searching, setSearching] = useState(false);
+  const searchRequestId = useRef(0);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
   const [dialog, setDialog] = useState(null);
+  const [roleOptions, setRoleOptions] = useState([]);
   const [form, setForm] = useState({
     name: "",
     email: "",
     phone: "",
     password: "",
     role: 2,
+    roleProfile: "",
   });
+  const selectedRole = form.role === 1 ? "system:administrator" : form.roleProfile ? `custom:${form.roleProfile}` : undefined;
+  const roleChoices = roleOptions.map((role) => ({
+    value: role.isSystem ? "system:administrator" : `custom:${role._id}`,
+    label: role.name,
+    description: role.isSystem ? "Full access to every menu and permission" : "Role created in Roles & Permissions",
+  }));
   const filteredUsers = useMemo(
     () =>
       users.filter((user) => {
@@ -36,12 +52,26 @@ function UsersPanel({ users, setUsers, token }) {
     [search, tab, users],
   );
   useEffect(() => {
-    api.users(token, { page, limit: 10, role: tab === "all" ? undefined : tab, search: search.trim() })
-      .then((response) => { setUsers(response.users || []); setPagination(response.pagination || { total: response.users?.length || 0, totalPages: 1 }); })
-      .catch((error) => toast.error(error.message));
-  }, [page, search, setUsers, tab, token]);
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  useEffect(() => {
+    const currentRequest = ++searchRequestId.current;
+    setSearching(true);
+    api.users(token, { page, limit: 10, role: tab === "all" ? undefined : tab, search: debouncedSearch })
+      .then((response) => {
+        if (currentRequest !== searchRequestId.current) return;
+        setUsers(response.users || []);
+        setPagination(response.pagination || { total: response.users?.length || 0, totalPages: 1 });
+      })
+      .catch((error) => currentRequest === searchRequestId.current && toast.error(error.message))
+      .finally(() => { if (currentRequest === searchRequestId.current) setSearching(false); });
+  }, [debouncedSearch, page, setUsers, tab, token]);
+  useEffect(() => {
+    api.roleOptions(token).then((response) => setRoleOptions(response.roles || [])).catch(() => setRoleOptions([]));
+  }, [token]);
   function openCreate() {
-    setForm({ name: "", email: "", phone: "", password: "", role: 2 });
+    setForm({ name: "", email: "", phone: "", password: "", role: 2, roleProfile: "" });
     setDialog({ mode: "create" });
   }
   function openEdit(user) {
@@ -51,11 +81,13 @@ function UsersPanel({ users, setUsers, token }) {
       phone: user.phone || "",
       password: "",
       role: user.role === 2 ? 2 : 1,
+      roleProfile: user.roleProfile?.id || "",
     });
     setDialog({ mode: "edit", user });
   }
   async function submitUser(event) {
     event.preventDefault();
+    if (!selectedRole) { toast.error("Select a role created in Roles & Permissions."); return; }
     try {
       const result =
         dialog.mode === "create"
@@ -97,10 +129,10 @@ function UsersPanel({ users, setUsers, token }) {
           <h1>User Management</h1>
           <p>Manage the people who have access to the JB Corporation CRM.</p>
         </div>
-        <button className="primary-action" type="button" onClick={openCreate}>
+        {canCreate && <button className="primary-action" type="button" onClick={openCreate}>
           <Plus size={17} />
           Add user
-        </button>
+        </button>}
       </div>
       <div className="user-toolbar">
         <div className="user-tabs">
@@ -135,6 +167,7 @@ function UsersPanel({ users, setUsers, token }) {
             onChange={(event) => { setSearch(event.target.value); setPage(1); }}
             placeholder="Search by name or email"
           />
+          {searching && <LoaderCircle className="module-search-spinner" size={15} aria-label="Searching" />}
         </label>
       </div>
       <div className="lead-pagination"><span>{pagination.total || 0} account{pagination.total === 1 ? "" : "s"}</span><div><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</button><strong>Page {page} of {pagination.totalPages || 1}</strong><button type="button" disabled={page >= (pagination.totalPages || 1)} onClick={() => setPage((current) => current + 1)}>Next</button></div></div>
@@ -169,13 +202,13 @@ function UsersPanel({ users, setUsers, token }) {
                     <span
                       className={`role-badge ${user.role === 2 ? "user" : "admin"}`}
                     >
-                      {user.roleLabel}
+                      {user.roleProfile?.name || user.roleLabel}
                     </span>
                   </td>
                   <td>{formatDisplayDate(user.createdAt)}</td>
                   <td>
                     <div className="table-actions">
-                      <button
+                      {canEdit && (isAdministrator(currentUser) || user.role === 2) && <button
                         className="icon-action edit"
                         type="button"
                         aria-label={`Edit ${user.name}`}
@@ -183,8 +216,8 @@ function UsersPanel({ users, setUsers, token }) {
                         onClick={() => openEdit(user)}
                       >
                         <Edit3 size={16} />
-                      </button>
-                      <button
+                      </button>}
+                      {canDelete && (isAdministrator(currentUser) || user.role === 2) && <button
                         className="icon-action delete"
                         type="button"
                         aria-label={`Delete ${user.name}`}
@@ -192,7 +225,7 @@ function UsersPanel({ users, setUsers, token }) {
                         onClick={() => setDialog({ mode: "delete", user })}
                       >
                         <Trash2 size={16} />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>
@@ -273,9 +306,19 @@ function UsersPanel({ users, setUsers, token }) {
               </label>
               <label>
                 Role
-                <RoleDropdown
-                  value={form.role}
-                  onChange={(role) => setForm({ ...form, role })}
+                <Select
+                  className="antd-crm-select user-role-select"
+                  value={selectedRole}
+                  placeholder="Select a role"
+                  options={roleChoices}
+                  optionFilterProp="label"
+                  showSearch
+                  popupClassName="user-role-dropdown"
+                  optionRender={(option) => <div className="user-role-option"><strong>{option.data.label}</strong><small>{option.data.description}</small></div>}
+                  labelRender={({ label }) => <span className="user-role-selected">{label}</span>}
+                  onChange={(value) => {
+                    setForm({ ...form, role: value === "system:administrator" ? 1 : 2, roleProfile: value.startsWith("custom:") ? value.slice(7) : "" });
+                  }}
                 />
               </label>
               <label className="full-field">

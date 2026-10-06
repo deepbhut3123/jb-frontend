@@ -16,13 +16,17 @@ import WhatsAppWorkspace from './pages/WhatsAppWorkspace.jsx';
 import PricingSettingsWorkspace from './pages/PricingSettingsWorkspace.jsx';
 import CustomersWorkspace from './pages/CustomersWorkspace.jsx';
 import ProfileWorkspace from './pages/ProfileWorkspace.jsx';
+import RolesWorkspace from './pages/RolesWorkspace.jsx';
+import { canView, isAdministrator } from '../../utils/permissions.js';
 
-const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', categories: '/categories', products: '/products', users: '/users', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers', profile: '/profile' };
+const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', categories: '/categories', products: '/products', users: '/users', roles: '/roles', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers', profile: '/profile' };
 
 function CrmWorkspace({ section = 'dashboard' }) {
   const session = getSession();
-  const isAdmin = [1, 3].includes(session.user.role);
   const [currentUser, setCurrentUser] = useState(session.user);
+  const isAdmin = isAdministrator(currentUser);
+  const canSeeDashboard = canView(currentUser, 'dashboard');
+  const canSeeUsers = canView(currentUser, 'users');
   const [data, setData] = useState(null);
   const [users, setUsers] = useState([]);
   const [leads, setLeads] = useState([]);
@@ -47,13 +51,25 @@ function CrmWorkspace({ section = 'dashboard' }) {
   useEffect(() => () => window.clearTimeout(sidebarCollapseTimerRef.current), []);
 
   useEffect(() => {
-    api.dashboard(session.token).then(setData).catch(() => { toast.error('Your session has expired. Please log in again.'); clearSession(); navigate('/login'); });
-  }, [session.token]);
+    api.session(session.token).then(({ user }) => {
+      setCurrentUser(user);
+      saveSession({ token: session.token, user });
+      if (section !== 'profile' && section !== 'roles' && !canView(user, section)) {
+        const fallback = routePaths[Object.keys(routePaths).find((key) => canView(user, key))] || '/profile';
+        navigate(fallback);
+      }
+    }).catch(() => { clearSession(); navigate('/login'); });
+  }, [section, session.token]);
+
   useEffect(() => {
-    if (!['users', 'leads'].includes(section) || !isAdmin) return;
+    if (!canSeeDashboard) return;
+    api.dashboard(session.token).then(setData).catch((error) => { if (/session|Authentication/i.test(error.message)) { toast.error('Your session has expired. Please log in again.'); clearSession(); navigate('/login'); } });
+  }, [canSeeDashboard, session.token]);
+  useEffect(() => {
+    if (!['users', 'leads'].includes(section) || (section === 'users' && !canSeeUsers) || (section === 'leads' && !isAdmin)) return;
     const lookup = new URLSearchParams(window.location.search).get('lookup') || '';
     api.users(session.token, section === 'leads' ? { limit: 100 } : { page: 1, limit: 10, search: lookup }).then((response) => setUsers(response.users || [])).catch((error) => toast.error(error.message));
-  }, [contentVersion, isAdmin, section, session.token]);
+  }, [canSeeUsers, contentVersion, isAdmin, section, session.token]);
   useEffect(() => {
     if (!['products', 'categories'].includes(section)) return;
     api.categories(session.token).then((response) => setCategories(response.categories || [])).catch((error) => toast.error(error.message));
@@ -126,11 +142,12 @@ function CrmWorkspace({ section = 'dashboard' }) {
           : section === 'customers' ? <CustomersWorkspace leads={leads} setLeads={setLeads} token={session.token} />
           : section === 'settings' ? <PricingSettingsWorkspace token={session.token} />
           : section === 'whatsapp' ? <WhatsAppWorkspace token={session.token} />
+          : section === 'roles' ? <RolesWorkspace token={session.token} />
           : section === 'users' ? <UsersPanel users={users} setUsers={setUsers} token={session.token} />
           : section === 'leads' ? <LeadsPanel leads={leads} setLeads={setLeads} isAdmin={isAdmin} users={users} token={session.token} currentUser={session.user} leadOptions={leadOptions} setLeadOptions={setLeadOptions} />
             : section === 'products' ? <ProductMasterPanel products={products} setProducts={setProducts} categories={categories} token={session.token} />
               : section === 'categories' ? <CategoryMasterPanel categories={categories} setCategories={setCategories} token={session.token} />
-                : section === 'quotations' ? <QuotationsPanel quotations={quotations} setQuotations={setQuotations} leads={leads} token={session.token} isAdmin={isAdmin} products={products} />
+                : section === 'quotations' ? <QuotationsPanel quotations={quotations} setQuotations={setQuotations} leads={leads} token={session.token} products={products} />
                   : <DashboardOverview data={data} session={session} />}
         </ModuleLoading>
       </div>
