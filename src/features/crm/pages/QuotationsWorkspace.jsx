@@ -3,7 +3,8 @@ import { Select } from "antd";
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
 import { CopyPlus, Download, Edit3, LoaderCircle, Mail, Phone, Plus, Search, Trash2, X } from "lucide-react";
-import { api } from "../../../services/api.js";
+import { api, getSession } from "../../../services/api.js";
+import { can } from "../../../utils/permissions.js";
 import { AntDatePicker, LeadDropdown, PhoneLink } from "../CrmControls.jsx";
 import { formatDisplayDate } from "../CrmUtils.jsx";
 import { navigate } from '../../../utils/navigation.js';
@@ -54,7 +55,12 @@ function revisionChanges(current, previous) {
   return changes.length ? changes : ["Revision saved without pricing changes"];
 }
 
-function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, products }) {
+function QuotationsPanel({ quotations, setQuotations, leads, token, products }) {
+  const permissionUser = getSession()?.user;
+  const canCreate = can(permissionUser, 'quotations.create');
+  const canEdit = can(permissionUser, 'quotations.edit');
+  const canDelete = can(permissionUser, 'quotations.delete');
+  const canViewAll = can(permissionUser, 'quotations.viewAll');
   const [dialog, setDialog] = useState(null);
   const [filter, setFilter] = useState("All");
   const [dateRange, setDateRange] = useState(() => new URLSearchParams(window.location.search).has("highlight") ? "all" : "month");
@@ -307,8 +313,8 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
   return (
     <div className="crm-content-inner quotation-management-page">
       <div className="section-heading">
-        <div><h1>Quotations</h1><p>{isAdmin ? "View all team quotations, including every revision." : "View your quotations and their revision history."}</p></div>
-        <button className="primary-action" type="button" onClick={() => openCreate()}><Plus size={17} />Add quotation</button>
+        <div><h1>Quotations</h1><p>{canViewAll ? "View all team quotations, including every revision." : "View quotations added by you and their revision history."}</p></div>
+        {canCreate && <button className="primary-action" type="button" onClick={() => openCreate()}><Plus size={17} />Add quotation</button>}
       </div>
       <div className="quotation-toolbar">
         <div className="quotation-filter-tabs">
@@ -327,9 +333,9 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
                 <td><div className="quotation-version-cell">{Number(quotation.revisionNumber) > 0 ? <span className="quotation-revision-badge">Revision {quotation.revisionNumber}</span> : <span className="quotation-original-badge">Original</span>}<small>{group.revisions.length} version{group.revisions.length === 1 ? "" : "s"}</small></div></td>
                 <td><div className="quotation-contact"><span className={!quotation.email ? "is-empty" : ""}><Mail size={14} />{quotation.email || "No email"}</span><span className={!quotation.phone ? "is-empty" : ""}><Phone size={14} /><PhoneLink phone={quotation.phone} /></span></div></td>
                 <td className="quotation-amount-cell"><strong>Rs. {quotationConvertedAmount(quotation, productById).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td><td className="quotation-amount-cell"><strong>Rs. {Number(quotation.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>{Number(quotation.generalDiscountPercent) > 0 && <small>{quotation.generalDiscountPercent}% general discount</small>}</td>
-                <td><div className="quotation-table-status" onClick={(event) => event.stopPropagation()}><LeadDropdown value={pendingStatuses[quotation._id] || quotation.status} options={quotationStatuses} onChange={(status) => updateStatus(quotation, status)} disabled={Boolean(pendingStatuses[quotation._id])} loading={Boolean(pendingStatuses[quotation._id])} ariaLabel={`Status for ${quotation.company || "quotation"}`} /></div></td>
+                <td><div className="quotation-table-status" onClick={(event) => event.stopPropagation()}><LeadDropdown value={pendingStatuses[quotation._id] || quotation.status} options={quotationStatuses} onChange={(status) => updateStatus(quotation, status)} disabled={!canEdit || Boolean(pendingStatuses[quotation._id])} loading={Boolean(pendingStatuses[quotation._id])} ariaLabel={`Status for ${quotation.company || "quotation"}`} /></div></td>
                 <td>{formatDisplayDate(quotation.quotationDate || quotation.createdAt)}</td><td>{quotation.createdByName || "You"}</td>
-                <td><div className="table-actions" onClick={(event) => event.stopPropagation()}><button className="icon-action download" type="button" title="Download quotation PDF" aria-label={`Download quotation for ${quotation.company || "company"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={16} /></button><button className="icon-action quotation" type="button" title={quotation.leadId ? "Create revised quotation" : "Link this older quotation to a lead before revising"} disabled={!quotation.leadId} onClick={() => openRevision(quotation)}><CopyPlus size={16} /></button><button className="icon-action edit" type="button" title="Edit latest quotation" onClick={() => openEdit(quotation)}><Edit3 size={16} /></button><button className="icon-action delete" type="button" title="Delete latest quotation" onClick={() => setDialog({ mode: "delete", quotation })}><Trash2 size={16} /></button></div></td>
+                <td><div className="table-actions" onClick={(event) => event.stopPropagation()}><button className="icon-action download" type="button" title="Download quotation PDF" aria-label={`Download quotation for ${quotation.company || "company"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={16} /></button>{canCreate && <button className="icon-action quotation" type="button" title={quotation.leadId ? "Create revised quotation" : "Link this older quotation to a lead before revising"} disabled={!quotation.leadId} onClick={() => openRevision(quotation)}><CopyPlus size={16} /></button>}{canEdit && <button className="icon-action edit" type="button" title="Edit latest quotation" onClick={() => openEdit(quotation)}><Edit3 size={16} /></button>}{canDelete && <button className="icon-action delete" type="button" title="Delete latest quotation" onClick={() => setDialog({ mode: "delete", quotation })}><Trash2 size={16} /></button>}</div></td>
               </tr>
             ); }) : <tr><td className="empty-table" colSpan="9">No quotations found for this filter.</td></tr>}
           </tbody>
@@ -350,7 +356,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, isAdmin, pro
                 </article>
               ))}
             </div>
-            <div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Close</button><button className="primary-action" type="button" disabled={!dialog.group.latest.leadId} onClick={() => openRevision(dialog.group.latest)}><CopyPlus size={16} />Create next revision</button></div>
+            <div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Close</button>{canCreate && <button className="primary-action" type="button" disabled={!dialog.group.latest.leadId} onClick={() => openRevision(dialog.group.latest)}><CopyPlus size={16} />Create next revision</button>}</div>
           </div>
         </div>
       )}

@@ -3,9 +3,10 @@ import { DatePicker, Select } from "antd";
 import dayjs from "dayjs";
 import { createRoot } from "react-dom/client";
 import { toast } from "react-toastify";
-import { Edit3, FilePlus2, Mic, MicOff, Plus, Search, Trash2, X } from "lucide-react";
+import { Edit3, FilePlus2, LoaderCircle, Mic, MicOff, Plus, Search, Trash2, X } from "lucide-react";
 import indiaLocations from "../../../data/indiaLocations.json";
-import { api } from "../../../services/api.js";
+import { api, getSession } from "../../../services/api.js";
+import { can } from "../../../utils/permissions.js";
 import { AntDatePicker, AssigneeDropdown, LeadDropdown, PhoneLink } from "../CrmControls.jsx";
 import { formatDisplayDate } from "../CrmUtils.jsx";
 import { navigate } from "../../../utils/navigation.js";
@@ -70,7 +71,15 @@ function LeadOptionManager({ type, label, options, token, onClose, onChanged }) 
 }
 
 function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadOptions, setLeadOptions }) {
+  const permissionUser = getSession()?.user;
+  const canCreate = can(permissionUser, 'leads.create');
+  const canEdit = can(permissionUser, 'leads.edit');
+  const canDelete = can(permissionUser, 'leads.delete');
+  const canCreateQuotation = can(permissionUser, 'quotations.create');
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("lookup") || "");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [searching, setSearching] = useState(false);
+  const searchRequestId = useRef(0);
   const [status, setStatus] = useState("All");
   const [dateRange, setDateRange] = useState(() => new URLSearchParams(window.location.search).has("highlight") ? "all" : "month");
   const [page, setPage] = useState(1);
@@ -119,7 +128,11 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
     setForm((current) => ({ ...current, companyPersons: current.companyPersons.map((person, personIndex) => personIndex === index ? { ...person, ...changes } : person) }));
   }
   useEffect(() => {
-    const params = { page, limit: 10, status: status === "All" ? undefined : status, search: search.trim() };
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  useEffect(() => {
+    const params = { page, limit: 10, status: status === "All" ? undefined : status, search: debouncedSearch };
     if (dateRange !== "all") {
       if (dateRange === "month") {
         params.dateFrom = dayjs().startOf("month").format("YYYY-MM-DD");
@@ -135,16 +148,17 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
         params.dateFrom = (dateRange === "today" ? dayjs() : dayjs().subtract(Number(dateRange) - 1, "day")).format("YYYY-MM-DD");
       }
     }
-    let active = true;
+    const currentRequest = ++searchRequestId.current;
+    setSearching(true);
     api.leads(token, params)
       .then((response) => {
-        if (!active) return;
+        if (currentRequest !== searchRequestId.current) return;
         setLeads(response.leads);
         setPagination(response.pagination || { page, limit: 10, total: response.leads.length, totalPages: 1 });
       })
-      .catch((error) => active && toast.error(error.message));
-    return () => { active = false; };
-  }, [dateRange, page, search, setLeads, status, token]);
+      .catch((error) => currentRequest === searchRequestId.current && toast.error(error.message))
+      .finally(() => { if (currentRequest === searchRequestId.current) setSearching(false); });
+  }, [dateRange, debouncedSearch, page, setLeads, status, token]);
   function commitLeads(nextLeads) {
     cleanupLeadTableEnhancements();
     setLeads([...nextLeads]);
@@ -491,10 +505,10 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
           <h1>Leads</h1>
           <p>Click a company name to view its details and people.</p>
         </div>
-        <button className="primary-action" type="button" onClick={openCreate}>
+        {canCreate && <button className="primary-action" type="button" onClick={openCreate}>
           <Plus size={17} />
           Add lead
-        </button>
+        </button>}
       </div>
       <div className="lead-toolbar">
         <div className="lead-status-tabs">
@@ -524,6 +538,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
             }}
             placeholder="Search leads"
           />
+          {searching && <LoaderCircle className="module-search-spinner" size={15} aria-label="Searching" />}
         </label>
         <label className="lead-date-filter">
           <span>Date</span>
@@ -597,6 +612,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
                         onChange={(nextStage) =>
                           updateInline(lead, { stage: nextStage, status: nextStage })
                         }
+                        disabled={!canEdit}
                       />
                     </div>
                   </td>
@@ -633,30 +649,30 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
                       className="table-actions"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <button
+                      {canCreateQuotation && <button
                         className="icon-action quotation"
                         type="button"
                         title="Create quotation for this lead"
                         onClick={() => navigate(`/quotations?leadId=${lead._id}&create=1`)}
                       >
                         <FilePlus2 size={16} />
-                      </button>
-                      <button
+                      </button>}
+                      {canEdit && <button
                         className="icon-action edit"
                         type="button"
                         title="Edit lead"
                         onClick={() => openEdit(lead)}
                       >
                         <Edit3 size={16} />
-                      </button>
-                      <button
+                      </button>}
+                      {canDelete && <button
                         className="icon-action delete"
                         type="button"
                         title="Delete lead"
                         onClick={() => deleteLead(lead)}
                       >
                         <Trash2 size={16} />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>
