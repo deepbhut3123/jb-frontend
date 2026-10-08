@@ -148,7 +148,7 @@ function CrmWorkspace({ section = 'dashboard' }) {
             : section === 'products' ? <ProductMasterPanel products={products} setProducts={setProducts} categories={categories} token={session.token} />
               : section === 'categories' ? <CategoryMasterPanel categories={categories} setCategories={setCategories} token={session.token} />
                 : section === 'quotations' ? <QuotationsPanel quotations={quotations} setQuotations={setQuotations} leads={leads} token={session.token} products={products} />
-                  : <DashboardOverview data={data} session={session} />}
+                  : <DashboardOverview data={data} session={{ ...session, user: currentUser }} />}
         </ModuleLoading>
       </div>
     </section>

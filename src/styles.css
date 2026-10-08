@@ -683,6 +683,7 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-items-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #4d4b66; font-size: .75rem; }
 .quotation-items-heading .secondary-action { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px; font-size: .7rem; }
 .quotation-item-labels, .quotation-item-row { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(180px, 1.1fr) 65px 78px 100px 105px 92px 105px 32px; align-items: center; gap: 9px; }
+.quotation-item-labels.with-margin, .quotation-item-row.with-margin { grid-template-columns: minmax(170px, 1fr) minmax(180px, 1.1fr) 65px 78px 100px 105px 72px 92px 105px 32px; }
 .quotation-item-labels { padding: 0 2px; color: #9695a6; font-size: .68rem; font-weight: 650; }
 .quotation-product-mount { display: block; min-width: 0; }
 .quotation-product-select { width: 100% !important; min-width: 0 !important; }
@@ -709,6 +710,13 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-item-row input:focus, .quotation-item-row textarea:focus { border-color: #392c98; box-shadow: 0 0 0 3px rgba(57,44,152,.1); }
 .quotation-item-row span { color: #29264f; font-size: .78rem; font-weight: 600; text-align: right; }
 .quotation-item-row .quotation-minimum-price { color: #16724a; }
+.quotation-item-row .quotation-margin-percent { color: #392c98; }
+.quotation-margin-cell { min-width: 82px; }
+.quotation-margin-cell small { display: block; color: #392c98; font-weight: 700; line-height: 1.5; }
+.quotation-phone-input { display: flex; min-height: 44px; overflow: hidden; border: 1px solid #dedee8; border-radius: 9px; background: #fff; }
+.quotation-phone-input:focus-within { border-color: #392c98; box-shadow: 0 0 0 3px rgba(57,44,152,.1); }
+.quotation-phone-input > span { display: grid; place-items: center; padding: 0 11px; border-right: 1px solid #dedee8; background: #f7f7fb; color: #4d4b66; font-size: .82rem; font-weight: 700; }
+.quotation-phone-input > input { min-width: 0; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
 .quotation-item-row .quotation-line-total { display: grid; gap: 3px; }
 .quotation-item-row .quotation-line-total small { min-height: 1em; color: #9695a6; font-size: .62rem; font-weight: 500; text-decoration: line-through; }
 .quotation-totals { display: grid; justify-content: end; gap: 6px; padding-top: 8px; border-top: 1px solid #eeeeF4; }

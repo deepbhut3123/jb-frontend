@@ -11,7 +11,12 @@ export default function CustomersWorkspace({ leads, setLeads, token }) {
   const canEdit = can(user, 'customers.edit');
   const canDelete = can(user, 'customers.delete');
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('lookup') || ''); const [dialog, setDialog] = useState(null); const [form, setForm] = useState(empty); const [saving, setSaving] = useState(false);
-  const customers = useMemo(() => leads.flatMap((lead) => (lead.companyPersons || []).map((person, index) => ({ ...person, _id: person._id || `${lead._id}-${index}`, leadId: lead._id, company: lead.company || 'Unnamed company' }))).filter((person) => `${person.name} ${person.role} ${person.number} ${person.email} ${person.company}`.toLowerCase().includes(search.toLowerCase())), [leads, search]);
+  const customers = useMemo(() => leads.flatMap((lead) => (lead.companyPersons || []).map((person, index) => ({ ...person, _id: person._id || `${lead._id}-${index}`, leadId: lead._id, company: lead.company || 'Unnamed company', leadCreatedAt: lead.createdAt }))).filter((person) => `${person.name} ${person.role} ${person.number} ${person.email} ${person.company}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) => {
+    const aId = /^[a-f\d]{24}$/i.test(String(a._id)) ? String(a._id) : '';
+    const bId = /^[a-f\d]{24}$/i.test(String(b._id)) ? String(b._id) : '';
+    if (aId && bId) return bId.localeCompare(aId);
+    return new Date(b.leadCreatedAt || 0) - new Date(a.leadCreatedAt || 0);
+  }), [leads, search]);
   function openCreate() { setForm(empty); setDialog('create'); }
   function openEdit(customer) { setForm({ leadId: customer.leadId, personId: customer._id, name: customer.name || '', role: customer.role || customer.designation || '', number: customer.number || customer.contactNumber || '', email: customer.email || '' }); setDialog('edit'); }
   async function save(event) { event.preventDefault(); const lead = leads.find((item) => String(item._id) === String(form.leadId)); if (!lead) return toast.error('Select a company lead.'); setSaving(true); try { const details = { name: form.name.trim(), role: form.role.trim(), number: form.number.trim(), email: form.email.trim() }; const result = dialog === 'edit' ? await api.updateCustomer(token, lead._id, form.personId, details) : await api.createCustomer(token, lead._id, details); setLeads((current) => current.map((item) => item._id === lead._id ? result.lead : item)); setDialog(null); toast.success(dialog === 'edit' ? 'Customer updated.' : 'Customer added.'); } catch (error) { toast.error(error.message); } finally { setSaving(false); } }

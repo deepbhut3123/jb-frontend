@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { api } from '../../../services/api.js';
 import { formatDisplayDate } from '../CrmUtils.jsx';
 import { navigate } from '../../../utils/navigation.js';
+import { can } from '../../../utils/permissions.js';
 
 const statuses = ['New', 'Quotation', 'Followup', 'Performa-Invoice', 'Done', 'Lost'];
 const chartColors = ['#392c98', '#d36517', '#168276', '#3566ad', '#9145a8', '#c44832', '#8d8b9f'];
@@ -41,7 +42,13 @@ function makeTrend(leads, range, metric) {
   const now = new Date();
   const buckets = [];
   const addBucket = (start, end, label) => buckets.push({ start, end, label, value: 0 });
-  if (range === '7') {
+  if (range === 'month') {
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const start = new Date(now.getFullYear(), now.getMonth(), day);
+      addBucket(start, new Date(now.getFullYear(), now.getMonth(), day + 1), day === 1 || day === daysInMonth || day % 5 === 0 ? String(day) : '');
+    }
+  } else if (range === '7') {
     for (let index = 6; index >= 0; index -= 1) {
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - index);
       addBucket(start, new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1), start.toLocaleDateString('en-IN', { weekday: 'short' }));
@@ -188,6 +195,11 @@ function TrendChart({ data, style, valueFormatter = (value) => value.toLocaleStr
 }
 
 function DashboardOverview({ session }) {
+  const canSeeLeads = can(session.user, 'leads.view');
+  const canSeeCustomers = can(session.user, 'customers.view');
+  const canSeeQuotations = can(session.user, 'quotations.view');
+  const canSeeProducts = can(session.user, 'products.view');
+  const canSeeAnyAnalytics = canSeeLeads || canSeeCustomers || canSeeQuotations || canSeeProducts;
   const [leads, setLeads] = useState([]);
   const [quotations, setQuotations] = useState([]);
   const [products, setProducts] = useState([]);
@@ -199,35 +211,51 @@ function DashboardOverview({ session }) {
     async function loadDashboardData() {
       try {
         const [firstLeadPage, quotationResponse, firstProductPage] = await Promise.all([
-          api.leads(session.token, { page: 1, limit: 100 }), api.quotations(session.token), api.products(session.token, { page: 1, limit: 1000 }),
+          canSeeLeads || canSeeCustomers ? api.leads(session.token, { page: 1, limit: 100 }) : Promise.resolve(null),
+          canSeeQuotations ? api.quotations(session.token) : Promise.resolve(null),
+          canSeeProducts ? api.products(session.token, { page: 1, limit: 1000 }) : Promise.resolve(null),
         ]);
-        const leadPages = firstLeadPage.pagination?.totalPages || 1;
-        const productPages = firstProductPage.pagination?.totalPages || 1;
+        const leadPages = firstLeadPage?.pagination?.totalPages || 1;
+        const productPages = firstProductPage?.pagination?.totalPages || 1;
         const [remainingLeadPages, remainingProductPages] = await Promise.all([
           leadPages > 1 ? Promise.all(Array.from({ length: leadPages - 1 }, (_, index) => api.leads(session.token, { page: index + 2, limit: 100 }))) : [],
           productPages > 1 ? Promise.all(Array.from({ length: productPages - 1 }, (_, index) => api.products(session.token, { page: index + 2, limit: 1000 }))) : [],
         ]);
         if (active) {
-          setLeads([...(firstLeadPage.leads || []), ...remainingLeadPages.flatMap((page) => page.leads || [])]);
-          setQuotations(quotationResponse.quotations || []);
-          setProducts([...(firstProductPage.products || []), ...remainingProductPages.flatMap((page) => page.products || [])]);
+          setLeads([...(firstLeadPage?.leads || []), ...remainingLeadPages.flatMap((page) => page.leads || [])]);
+          setQuotations(quotationResponse?.quotations || []);
+          setProducts([...(firstProductPage?.products || []), ...remainingProductPages.flatMap((page) => page.products || [])]);
         }
       } catch (error) { if (active) toast.error(error.message); }
     }
     loadDashboardData();
     return () => { active = false; };
-  }, [session.token]);
+  }, [canSeeCustomers, canSeeLeads, canSeeProducts, canSeeQuotations, session.token]);
 
   useEffect(() => { localStorage.setItem(preferenceKey, JSON.stringify(preferences)); }, [preferences]);
   const updatePreference = (key, value) => setPreferences((current) => ({ ...current, [key]: value }));
   const filteredLeads = useMemo(() => {
     if (range === 'all') return leads;
+    if (range === 'month') {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      start.setDate(1);
+      const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+      return leads.filter((lead) => { const date = new Date(lead.createdAt); return date >= start && date < end; });
+    }
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - Number(range));
     return leads.filter((lead) => new Date(lead.createdAt) >= cutoff);
   }, [leads, range]);
   const periodQuotations = useMemo(() => {
     if (range === 'all') return quotations;
+    if (range === 'month') {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      start.setDate(1);
+      const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+      return quotations.filter((quotation) => { const date = new Date(quotation.quotationDate || quotation.createdAt); return date >= start && date < end; });
+    }
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - Number(range));
     return quotations.filter((quotation) => new Date(quotation.quotationDate || quotation.createdAt) >= cutoff);
@@ -270,19 +298,18 @@ function DashboardOverview({ session }) {
 
   return <div className="crm-content-inner analytics-dashboard">
     <div className="analytics-heading dashboard-heading">
-      <div><span className="dashboard-kicker">Live business performance</span><h1>Good to see you, {session.user.name.split(' ')[0]}.</h1><p>Track leads, quotations, product demand and team activity from one place.</p></div>
-      <label className="dashboard-period"><span>Reporting period</span><Select className="antd-range-select" value={range} onChange={setRange} options={[{ value: 'all', label: 'All time' }, { value: '365', label: 'Last 12 months' }, { value: '90', label: 'Last 90 days' }, { value: '30', label: 'Last 30 days' }, { value: '7', label: 'Last 7 days' }]} /></label>
+      <div><span className="dashboard-kicker">Live business performance</span><h1>Good to see you, {session.user.name.split(' ')[0]}.</h1><p>Your dashboard shows analytics only for the modules available to you.</p></div>
+      <label className="dashboard-period"><span>Reporting period</span><Select className="antd-range-select" value={range} onChange={setRange} options={[{ value: 'month', label: 'Current month' }, { value: 'all', label: 'All time' }, { value: '365', label: 'Last 12 months' }, { value: '90', label: 'Last 90 days' }, { value: '30', label: 'Last 30 days' }, { value: '7', label: 'Last 7 days' }]} /></label>
     </div>
 
     <div className="analytics-kpis dashboard-kpis">
-      <article><span className="dashboard-kpi-icon purple"><UsersRound size={18} /></span><div><span>Total leads</span><strong>{filteredLeads.length}</strong><small>In selected period</small></div></article>
-      <article><span className="dashboard-kpi-icon blue"><Building2 size={18} /></span><div><span>Customer companies</span><strong>{metrics.customers}</strong><small>{metrics.open} leads in open pipeline</small></div></article>
-      <article><span className="dashboard-kpi-icon orange"><FileText size={18} /></span><div><span>Quotations</span><strong>{filteredQuotations.length}</strong><small>{quotationMetrics.revisions} total revisions</small></div></article>
-      <article><span className="dashboard-kpi-icon amber"><IndianRupee size={18} /></span><div><span>Quoted value</span><strong>{formatCompactCurrency(quotationMetrics.totalValue)}</strong><small>Latest quotation versions</small></div></article>
-      <article><span className="dashboard-kpi-icon green"><BadgeCheck size={18} /></span><div><span>Accepted value</span><strong>{formatCompactCurrency(quotationMetrics.acceptedValue)}</strong><small>{quotationMetrics.acceptanceRate}% decision success rate</small></div></article>
-      <article><span className="dashboard-kpi-icon red"><Package size={18} /></span><div><span>Active products</span><strong>{activeProducts}</strong><small>{products.length - activeProducts} inactive · {products.length} total</small></div></article>
+      {canSeeLeads && <article><span className="dashboard-kpi-icon purple"><UsersRound size={18} /></span><div><span>Total leads</span><strong>{filteredLeads.length}</strong><small>In selected period</small></div></article>}
+      {canSeeCustomers && <article><span className="dashboard-kpi-icon blue"><Building2 size={18} /></span><div><span>Customer companies</span><strong>{metrics.customers}</strong><small>In selected period</small></div></article>}
+      {canSeeQuotations && <><article><span className="dashboard-kpi-icon orange"><FileText size={18} /></span><div><span>Quotations</span><strong>{filteredQuotations.length}</strong><small>{quotationMetrics.revisions} total revisions</small></div></article><article><span className="dashboard-kpi-icon amber"><IndianRupee size={18} /></span><div><span>Quoted value</span><strong>{formatCompactCurrency(quotationMetrics.totalValue)}</strong><small>Latest quotation versions</small></div></article><article><span className="dashboard-kpi-icon green"><BadgeCheck size={18} /></span><div><span>Accepted value</span><strong>{formatCompactCurrency(quotationMetrics.acceptedValue)}</strong><small>{quotationMetrics.acceptanceRate}% decision success rate</small></div></article></>}
+      {canSeeProducts && <article><span className="dashboard-kpi-icon red"><Package size={18} /></span><div><span>Active products</span><strong>{activeProducts}</strong><small>{products.length - activeProducts} inactive · {products.length} total</small></div></article>}
     </div>
 
+    {canSeeLeads && <>
     <div className="dashboard-module-heading"><div><span className="dashboard-module-icon leads"><UsersRound size={18} /></span><div><span>Lead module</span><h2>Pipeline and acquisition intelligence</h2></div></div><small>{metrics.scheduled} follow-ups scheduled · {metrics.overdue} overdue</small></div>
     <div className="dashboard-chart-grid">
       <section className="analytics-card dashboard-chart-card">
@@ -307,7 +334,9 @@ function DashboardOverview({ session }) {
         <div className="dashboard-insights"><div><Clock3 size={16} /><span><strong>{metrics.overdue} overdue follow-ups</strong><small>Need attention now</small></span></div><div><Flame size={16} /><span><strong>{metrics.highPriority} hot opportunities</strong><small>High-priority open leads</small></span></div><div><Goal size={16} /><span><strong>{topSource?.label || 'No source data'}</strong><small>{topSource ? `${topSource.value} leads from your top source` : 'Add lead sources for insights'}</small></span></div></div>
       </section>
     </div>
+    </>}
 
+    {canSeeQuotations && <>
     <div className="dashboard-module-heading"><div><span className="dashboard-module-icon quotations"><FileText size={18} /></span><div><span>Quotation module</span><h2>Quotation performance and value</h2></div></div><small>{quotationMetrics.accepted} accepted · {quotationMetrics.acceptanceRate}% success after decision</small></div>
     <div className="dashboard-chart-grid">
       <section className="analytics-card dashboard-chart-card">
@@ -324,23 +353,27 @@ function DashboardOverview({ session }) {
       {preferences.userQuotationStyle === 'donut' ? <DonutChart data={userQuotationData} valueFormatter={userQuotationValueFormatter} /> : <BarChart data={userQuotationData} ranked={preferences.userQuotationStyle === 'ranked'} valueFormatter={userQuotationValueFormatter} />}
       <p className="dashboard-chart-note">Performance is assigned to the quotation creator. Accepted value is a sales indicator, not invoiced revenue.</p>
     </section>
+    </>}
 
-    <div className="dashboard-module-heading"><div><span className="dashboard-module-icon products"><Package size={18} /></span><div><span>Product module</span><h2>Product demand and catalogue intelligence</h2></div></div><small>Accepted quantity is based on accepted quotations, not invoiced sales.</small></div>
+    {canSeeProducts && <>
+    <div className="dashboard-module-heading"><div><span className="dashboard-module-icon products"><Package size={18} /></span><div><span>Product module</span><h2>{canSeeQuotations ? 'Product demand and catalogue intelligence' : 'Product catalogue intelligence'}</h2></div></div>{canSeeQuotations && <small>Accepted quantity is based on accepted quotations, not invoiced sales.</small>}</div>
     <div className="dashboard-chart-grid">
-      <section className="analytics-card dashboard-chart-card">
+      {canSeeQuotations && <section className="analytics-card dashboard-chart-card">
         <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Demand ranking</span><h2>Most requested products</h2></div><ChartControls dimension={preferences.productMetric} dimensions={[{ value: 'quotedQuantity', label: 'Quoted quantity' }, { value: 'quotationCount', label: 'Quotation frequency' }, { value: 'sentQuotationCount', label: 'Sent quote frequency' }, { value: 'quotedValue', label: 'Quoted value' }, { value: 'acceptedQuantity', label: 'Accepted quantity' }, { value: 'acceptedValue', label: 'Accepted value' }]} style={preferences.productStyle} styles={[{ value: 'bar', label: 'Bar chart' }, { value: 'ranked', label: 'Ranked list' }, { value: 'donut', label: 'Donut chart' }]} onDimension={(value) => updatePreference('productMetric', value)} onStyle={(value) => updatePreference('productStyle', value)} /></div>
         {preferences.productStyle === 'donut' ? <DonutChart data={demand} valueFormatter={demandValueFormatter} /> : <BarChart data={demand} ranked={preferences.productStyle === 'ranked'} valueFormatter={demandValueFormatter} />}
-      </section>
+      </section>}
       <section className="analytics-card dashboard-chart-card">
         <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Product master</span><h2>Catalogue mix</h2></div><ChartControls dimension={preferences.catalogDimension} dimensions={[{ value: 'category', label: 'Category' }, { value: 'subCategory', label: 'Sub-category' }, { value: 'brand', label: 'Brand' }, { value: 'status', label: 'Active status' }, { value: 'taxRate', label: 'GST rate' }]} style={preferences.catalogStyle} styles={[{ value: 'donut', label: 'Donut chart' }, { value: 'bar', label: 'Bar chart' }]} onDimension={(value) => updatePreference('catalogDimension', value)} onStyle={(value) => updatePreference('catalogStyle', value)} /></div>
         {preferences.catalogStyle === 'donut' ? <DonutChart data={catalog} /> : <BarChart data={catalog} />}
       </section>
     </div>
+    </>}
 
-    <section className="analytics-card activity-card dashboard-activity-card">
+    {canSeeLeads && <section className="analytics-card activity-card dashboard-activity-card">
       <div className="analytics-card-heading"><div><span className="dashboard-kicker">Recent activity</span><h2>Latest leads</h2></div><button className="text-action" type="button" onClick={() => navigate('/leads')}>View all leads</button></div>
       {latest.length ? <div className="activity-list">{latest.map((lead) => <div className="activity-row" key={lead._id}><div className={`activity-status status-${String(lead.status || 'new').toLowerCase().replace(/[^a-z]/g, '')}`} /><div><strong>{lead.company || 'Unnamed company'}</strong><span>{lead.city || 'No city'} · {lead.status} · {lead.assignedName || 'Unassigned'}</span></div><span className={`activity-priority priority-${String(lead.priority || 'medium').toLowerCase()}`}>{lead.priority || 'Medium'}</span><time>{formatDisplayDate(lead.createdAt)}</time></div>)}</div> : <p className="analytics-empty">Create your first lead to see activity here.</p>}
-    </section>
+    </section>}
+    {!canSeeAnyAnalytics && <section className="analytics-card"><p className="analytics-empty">No module analytics are available with your current permissions.</p></section>}
   </div>;
 }
 

@@ -5,8 +5,11 @@ import { Plus } from "lucide-react";
 
 function PhoneLink({ phone, fallback = "No phone" }) {
   if (!phone || !/\d/.test(String(phone))) return fallback;
-  const dialNumber = String(phone).replace(/[^\d+]/g, "");
-  return <a className="phone-link" href={`tel:${dialNumber}`}>{phone}</a>;
+  const digits = String(phone).replace(/\D/g, "");
+  const indianDigits = digits.length === 12 && digits.startsWith("91") ? digits.slice(2) : digits.length === 10 ? digits : "";
+  const dialNumber = indianDigits ? `+91${indianDigits}` : String(phone).replace(/[^\d+]/g, "");
+  const displayNumber = indianDigits ? `+91 ${indianDigits.slice(0, 5)} ${indianDigits.slice(5)}` : phone;
+  return <a className="phone-link" href={`tel:${dialNumber}`}>{displayNumber}</a>;
 }
 
 function RoleDropdown({ value, onChange }) {
