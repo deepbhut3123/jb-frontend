@@ -40,7 +40,7 @@ function RolesWorkspace({ token }) {
     event.preventDefault();
     try {
       const result = dialog.mode === 'create' ? await api.createRole(token, form) : await api.updateRole(token, dialog.role._id, form);
-      setRoles((current) => dialog.mode === 'create' ? [...current, result.role].sort((a, b) => a.name.localeCompare(b.name)) : current.map((role) => role._id === result.role._id ? result.role : role));
+      setRoles((current) => dialog.mode === 'create' ? [...current.filter((role) => role.isSystem), result.role, ...current.filter((role) => !role.isSystem)] : current.map((role) => role._id === result.role._id ? result.role : role));
       setDialog(null);
       toast.success(dialog.mode === 'create' ? 'Role created successfully.' : 'Permissions updated successfully. Changes apply on the user’s next request.');
     } catch (error) { toast.error(error.message); }

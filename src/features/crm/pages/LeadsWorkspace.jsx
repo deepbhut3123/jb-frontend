@@ -81,7 +81,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
   const [searching, setSearching] = useState(false);
   const searchRequestId = useRef(0);
   const [status, setStatus] = useState("All");
-  const [dateRange, setDateRange] = useState(() => new URLSearchParams(window.location.search).has("highlight") ? "all" : "month");
+  const [dateRange, setDateRange] = useState("all");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const [dialog, setDialog] = useState(null);
@@ -488,7 +488,10 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
     }
   }
   const details = dialog?.mode === "details" ? dialog.lead : null;
-  const followUps = dialog?.lead?.followUps || [];
+  const followUps = [...(dialog?.lead?.followUps || [])].sort((a, b) => {
+    const dateDifference = new Date(b.date || 0) - new Date(a.date || 0);
+    return dateDifference || String(b._id || '').localeCompare(String(a._id || ''));
+  });
   async function sendFollowUpOnWhatsApp(lead, item) {
     if (!item._id || sendingFollowUp) return;
     setSendingFollowUp(item._id);

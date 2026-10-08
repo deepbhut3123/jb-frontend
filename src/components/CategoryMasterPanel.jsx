@@ -47,7 +47,7 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
     setSaving(true);
     try {
       const result = dialog.mode === 'create' ? await api.createCategory(token, { name: categoryName }) : await api.updateCategory(token, dialog.category._id, { name: categoryName });
-      setCategories((current) => dialog.mode === 'create' ? [...current, result.category].sort((a, b) => a.name.localeCompare(b.name)) : current.map((category) => category._id === result.category._id ? result.category : category));
+      setCategories((current) => dialog.mode === 'create' ? [result.category, ...current] : current.map((category) => category._id === result.category._id ? result.category : category));
       setDialog(null); setCategoryName(''); toast.success(dialog.mode === 'create' ? 'Category added successfully.' : 'Category updated successfully.');
     } catch (error) { toast.error(error.message); } finally { setSaving(false); }
   }
