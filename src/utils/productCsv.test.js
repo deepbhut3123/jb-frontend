@@ -7,14 +7,14 @@ test('blank template contains only the import headers', () => {
 });
 
 test('exported CSV imports quoted descriptions and inactive products', () => {
-  const csv = exportProductsCsv([{ partCode: 'JB-01', description: 'Valve, "large"\nsteel', brand: 'JB', category: 'Valves', subCategory: 'Steel', subSubCategory: 'Stainless', hsnCode: '1234', taxRate: 5, mrp: 129.5, isActive: false, image: '/public/products/valve.png' }]);
+  const csv = exportProductsCsv([{ partCode: 'JB-01', description: 'Valve, "large"\nsteel', brand: 'JB', category: 'Valves', subCategory: 'Steel', subSubCategory: 'Stainless', hsnCode: '1234', taxRate: 5, dollarAmount: 129.5, marginPercent: 12, isActive: false, image: '/public/products/valve.png' }]);
   const result = importProductsCsv(csv);
   assert.deepEqual(result.errors, []);
-  assert.deepEqual(result.products, [{ rowNumber: 2, partCode: 'JB-01', description: 'Valve, "large"\nsteel', brand: 'JB', category: 'Valves', subCategory: 'Steel', subSubCategory: 'Stainless', hsnCode: '1234', taxRate: 5, mrp: 129.5, isActive: false, image: '/public/products/valve.png' }]);
+  assert.deepEqual(result.products, [{ rowNumber: 2, partCode: 'JB-01', description: 'Valve, "large"\nsteel', brand: 'JB', category: 'Valves', subCategory: 'Steel', subSubCategory: 'Stainless', hsnCode: '1234', taxRate: 5, dollarAmount: 129.5, marginPercent: 12, isActive: false, image: '/public/products/valve.png' }]);
 });
 
 test('import rejects duplicate part codes and invalid prices without sending those rows', () => {
-  const csv = `${exportProductsCsv([])}jb-01,Valve,,Valves,,,,18,100,Yes,\r\nJB-01,Other,,Valves,,,,18,50,Yes,\r\nJB-03,Other,,Valves,,,,18,-1,Yes,\r\n`;
+  const csv = `${exportProductsCsv([])}jb-01,Valve,,Valves,,,,18,100,0,Yes,\r\nJB-01,Other,,Valves,,,,18,50,0,Yes,\r\nJB-03,Other,,Valves,,,,18,-1,0,Yes,\r\n`;
   const result = importProductsCsv(csv);
   assert.equal(result.products.length, 1);
   assert.equal(result.errors.length, 2);
@@ -29,4 +29,6 @@ test('previous templates without a sub-sub category column still import', () => 
   const result = importProductsCsv(csv);
   assert.deepEqual(result.errors, []);
   assert.equal(Object.hasOwn(result.products[0], 'subSubCategory'), false);
+  assert.equal(result.products[0].dollarAmount, 100);
+  assert.equal(result.products[0].marginPercent, 0);
 });
