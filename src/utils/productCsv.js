@@ -7,7 +7,8 @@ export const productCsvColumns = [
   { header: 'Sub-sub Category', key: 'subSubCategory' },
   { header: 'HSN Code', key: 'hsnCode' },
   { header: 'GST Rate', key: 'taxRate' },
-  { header: 'MRP', key: 'mrp' },
+  { header: 'USD Price', key: 'dollarAmount' },
+  { header: 'Margin %', key: 'marginPercent' },
   { header: 'Active', key: 'isActive' },
   { header: 'Image URL', key: 'image' },
 ];
@@ -60,8 +61,9 @@ export function importProductsCsv(text) {
   const rows = parseCsv(text.replace(/^\uFEFF/, ''));
   if (!rows.length) throw new Error('The CSV file is empty. Download the blank template first.');
   const headers = rows[0].map((header) => header.trim().toLowerCase());
-  const positions = Object.fromEntries(productCsvColumns.map(({ header, key }) => [key, headers.indexOf(header.toLowerCase())]));
-  const missing = productCsvColumns.filter(({ key }) => key !== 'subSubCategory' && positions[key] === -1).map(({ header }) => header);
+  const aliases = { dollarAmount: ['usd price', 'dollar amount (usd)', 'dollar amount', 'mrp'], marginPercent: ['margin %', 'margin percentage'] };
+  const positions = Object.fromEntries(productCsvColumns.map(({ header, key }) => [key, (aliases[key] || [header.toLowerCase()]).map((alias) => headers.indexOf(alias)).find((position) => position !== -1) ?? -1]));
+  const missing = productCsvColumns.filter(({ key }) => !['subSubCategory', 'marginPercent'].includes(key) && positions[key] === -1).map(({ header }) => header);
   if (missing.length) throw new Error(`Missing column${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}.`);
   const products = [];
   const errors = [];
@@ -72,18 +74,20 @@ export function importProductsCsv(text) {
     const partCode = value('partCode').toUpperCase();
     const description = value('description');
     const category = value('category');
-    const mrp = value('mrp');
+    const dollarAmount = value('dollarAmount');
+    const marginPercent = value('marginPercent') || '0';
     const gst = value('taxRate') || '18';
     const active = value('isActive').toLowerCase();
     const rowNumber = index + 2;
-    if (!partCode || !description || !category || !mrp) { errors.push(`Row ${rowNumber}: Part Code, Description, Category, and MRP are required.`); return; }
+    if (!partCode || !description || !category || !dollarAmount) { errors.push(`Row ${rowNumber}: Part Code, Description, Category, and USD Price are required.`); return; }
     if (partCode.length > 40 || description.length > 1000 || value('brand').length > 80 || value('hsnCode').length > 20) { errors.push(`Row ${rowNumber}: a field exceeds its maximum length.`); return; }
-    if (!/^\d+(?:\.\d+)?$/.test(mrp)) { errors.push(`Row ${rowNumber}: MRP must be a non-negative number.`); return; }
+    if (!/^\d+(?:\.\d+)?$/.test(dollarAmount)) { errors.push(`Row ${rowNumber}: USD Price must be a non-negative number.`); return; }
+    if (!/^\d+(?:\.\d+)?$/.test(marginPercent)) { errors.push(`Row ${rowNumber}: Margin % must be a non-negative number.`); return; }
     if (![0, 5, 12, 18, 28].includes(Number(gst))) { errors.push(`Row ${rowNumber}: GST Rate must be 0, 5, 12, 18, or 28.`); return; }
     if (active && !['yes', 'no', 'true', 'false', '1', '0', 'active', 'inactive'].includes(active)) { errors.push(`Row ${rowNumber}: Active must be Yes or No.`); return; }
     if (seenCodes.has(partCode)) { errors.push(`Row ${rowNumber}: Part Code ${partCode} appears more than once.`); return; }
     seenCodes.add(partCode);
-    products.push({ rowNumber, partCode, description, brand: value('brand'), category, subCategory: value('subCategory'), ...(positions.subSubCategory === -1 ? {} : { subSubCategory: value('subSubCategory') }), hsnCode: value('hsnCode'), taxRate: Number(gst), mrp: Number(mrp), isActive: !['no', 'false', '0', 'inactive'].includes(active), image: value('image') });
+    products.push({ rowNumber, partCode, description, brand: value('brand'), category, subCategory: value('subCategory'), ...(positions.subSubCategory === -1 ? {} : { subSubCategory: value('subSubCategory') }), hsnCode: value('hsnCode'), taxRate: Number(gst), dollarAmount: Number(dollarAmount), marginPercent: Number(marginPercent), isActive: !['no', 'false', '0', 'inactive'].includes(active), image: value('image') });
   });
   return { products, errors };
 }
