@@ -86,7 +86,7 @@ function CrmWorkspace({ section = 'dashboard' }) {
   useEffect(() => {
     if (!['products', 'quotations'].includes(section)) return;
     const lookup = section === 'products' ? new URLSearchParams(window.location.search).get('lookup') || '' : '';
-    api.products(session.token, section === 'quotations' ? { limit: 1000 } : { page: 1, limit: 10, search: lookup }).then((response) => setProducts(response.products || [])).catch((error) => toast.error(error.message));
+    api.products(session.token, section === 'quotations' ? { limit: 1000 } : { page: 1, limit: 20, search: lookup }).then((response) => setProducts(response.products || [])).catch((error) => toast.error(error.message));
   }, [contentVersion, isAdmin, section, session.token]);
 
   useEffect(() => {

@@ -10,6 +10,8 @@ import { can } from "../../../utils/permissions.js";
 import { AntDatePicker, AssigneeDropdown, LeadDropdown, PhoneLink } from "../CrmControls.jsx";
 import { formatDisplayDate } from "../CrmUtils.jsx";
 import { navigate } from "../../../utils/navigation.js";
+import useInfiniteScroll from "../../../hooks/useInfiniteScroll.js";
+import LoadingButton from "../../../components/LoadingButton.jsx";
 
 const emptyCompanyPerson = { name: "", role: "", number: "", email: "" };
 
@@ -49,9 +51,14 @@ function finishLeadTableEnhancements(leads) {
 function LeadOptionManager({ type, label, options, token, onClose, onChanged }) {
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   async function saveOption(event) {
     event.preventDefault();
     if (!value.trim()) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       const result = editing
         ? await api.updateLeadOption(token, editing._id, { value })
@@ -59,6 +66,7 @@ function LeadOptionManager({ type, label, options, token, onClose, onChanged }) 
       onChanged(editing ? options.map((item) => item._id === result.option._id ? result.option : item) : [...options, result.option]);
       setValue(""); setEditing(null); toast.success(editing ? "Dropdown value updated." : "Dropdown value added.");
     } catch (error) { toast.error(error.message); }
+    finally { savingRef.current = false; setSaving(false); }
   }
   async function removeOption(option) {
     try {
@@ -67,7 +75,7 @@ function LeadOptionManager({ type, label, options, token, onClose, onChanged }) 
       toast.success("Dropdown value deleted.");
     } catch (error) { toast.error(error.message); }
   }
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="confirm-modal lead-option-modal"><div className="modal-heading"><div><span className="dashboard-kicker">Lead configuration</span><h2>{label} values</h2></div><button className="modal-close" type="button" aria-label="Close" onClick={onClose}><X size={18} /></button></div><form className="lead-option-form" onSubmit={saveOption}><input value={value} onChange={(event) => setValue(event.target.value)} placeholder={`Add ${label.toLowerCase()}`} /><button className="primary-action" type="submit">{editing ? "Save" : "Add"}</button>{editing && <button className="secondary-action" type="button" onClick={() => { setEditing(null); setValue(""); }}>Cancel</button>}</form><div className="lead-option-list">{options.map((option) => <div className="lead-option-row" key={option._id}><span>{option.value}</span><button className="lead-option-icon edit" type="button" title={`Edit ${option.value}`} aria-label={`Edit ${option.value}`} onClick={() => { setEditing(option); setValue(option.value); }}><Edit3 size={15} /></button><button className="lead-option-icon delete" type="button" title={`Delete ${option.value}`} aria-label={`Delete ${option.value}`} onClick={() => removeOption(option)}><Trash2 size={15} /></button></div>)}</div></div></div>;
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && onClose()}><div className="confirm-modal lead-option-modal"><div className="modal-heading"><div><span className="dashboard-kicker">Lead configuration</span><h2>{label} values</h2></div><button className="modal-close" disabled={saving} type="button" aria-label="Close" onClick={onClose}><X size={18} /></button></div><form className="lead-option-form" onSubmit={saveOption}><input value={value} onChange={(event) => setValue(event.target.value)} placeholder={`Add ${label.toLowerCase()}`} /><LoadingButton loading={saving} loadingText={editing ? "Saving..." : "Adding..."}>{editing ? "Save" : "Add"}</LoadingButton>{editing && <button className="secondary-action" disabled={saving} type="button" onClick={() => { setEditing(null); setValue(""); }}>Cancel</button>}</form><div className="lead-option-list">{options.map((option) => <div className="lead-option-row" key={option._id}><span>{option.value}</span><button className="lead-option-icon edit" type="button" title={`Edit ${option.value}`} aria-label={`Edit ${option.value}`} onClick={() => { setEditing(option); setValue(option.value); }}><Edit3 size={15} /></button><button className="lead-option-icon delete" type="button" title={`Delete ${option.value}`} aria-label={`Delete ${option.value}`} onClick={() => removeOption(option)}><Trash2 size={15} /></button></div>)}</div></div></div>;
 }
 
 function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadOptions, setLeadOptions }) {
@@ -80,10 +88,21 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [searching, setSearching] = useState(false);
   const searchRequestId = useRef(0);
+  const leadSavingRef = useRef(false);
+  const followUpSavingRef = useRef(false);
+  const tableWrapRef = useRef(null);
   const [status, setStatus] = useState("All");
   const [dateRange, setDateRange] = useState("all");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
+  const [savingLead, setSavingLead] = useState(false);
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const loadMoreRef = useInfiniteScroll({
+    rootRef: tableWrapRef,
+    hasMore: page < pagination.totalPages,
+    loading: searching,
+    onLoadMore: () => setPage((current) => current + 1),
+  });
   const [dialog, setDialog] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState(null);
   const [optionDialog, setOptionDialog] = useState(null);
@@ -153,7 +172,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
     api.leads(token, params)
       .then((response) => {
         if (currentRequest !== searchRequestId.current) return;
-        setLeads(response.leads);
+        setLeads((current) => page === 1 ? response.leads : [...current, ...response.leads.filter((lead) => !current.some((item) => String(item._id) === String(lead._id)))]);
         setPagination(response.pagination || { page, limit: 10, total: response.leads.length, totalPages: 1 });
       })
       .catch((error) => currentRequest === searchRequestId.current && toast.error(error.message))
@@ -379,6 +398,9 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
   }
   async function submitLead(event) {
     event.preventDefault();
+    if (leadSavingRef.current) return;
+    leadSavingRef.current = true;
+    setSavingLead(true);
     try {
       const mode = dialog.mode;
       const payload = { ...form, companyPersons: normalizeCompanyPersons(form.companyPersons) };
@@ -403,6 +425,9 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
       );
     } catch (error) {
       toast.error(error.message);
+    } finally {
+      leadSavingRef.current = false;
+      setSavingLead(false);
     }
   }
   async function deleteLead(lead) {
@@ -439,6 +464,9 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
   async function submitFollowup(event) {
     event.preventDefault();
     stopVoiceTyping();
+    if (followUpSavingRef.current) return;
+    followUpSavingRef.current = true;
+    setSavingFollowUp(true);
     try {
       const mode = followUpDialog.mode;
       const result =
@@ -466,6 +494,9 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
       );
     } catch (error) {
       toast.error(error.message);
+    } finally {
+      followUpSavingRef.current = false;
+      setSavingFollowUp(false);
     }
   }
   async function deleteFollowup() {
@@ -558,7 +589,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
           />
         </label>
       </div>
-      <div className="leads-table-wrap">
+      <div className="leads-table-wrap" ref={tableWrapRef}>
         <table className="leads-table">
           <thead>
             <tr>
@@ -689,20 +720,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
             )}
           </tbody>
         </table>
-      </div>
-      <div className="lead-pagination">
-        <span>
-          {pagination.total} lead{pagination.total === 1 ? "" : "s"}
-        </span>
-        <div>
-          <button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
-            Previous
-          </button>
-          <strong>Page {page} of {pagination.totalPages}</strong>
-          <button type="button" disabled={page >= pagination.totalPages} onClick={() => setPage((current) => current + 1)}>
-            Next
-          </button>
-        </div>
+        <div ref={loadMoreRef} className="infinite-scroll-status" aria-live="polite">{searching && page > 1 ? <><LoaderCircle size={15} />Loading more leads…</> : <span>{filteredLeads.length} of {pagination.total} leads</span>}</div>
       </div>
       {dialog && ["create", "edit"].includes(dialog.mode) && (
         <div
@@ -799,9 +817,9 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               >
                 Cancel
               </button>
-              <button className="primary-action" type="submit">
+              <LoadingButton loading={savingLead} loadingText={dialog.mode === "create" ? "Creating lead…" : "Saving changes…"}>
                 {dialog.mode === "create" ? "Create lead" : "Save changes"}
-              </button>
+              </LoadingButton>
             </div>
           </form>
         </div>
@@ -1078,9 +1096,9 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               >
                 Cancel
               </button>
-              <button className="primary-action" type="submit">
+              <LoadingButton loading={savingFollowUp} loadingText="Saving follow-up…">
                 Save follow-up
-              </button>
+              </LoadingButton>
             </div>
           </form>
         </div>

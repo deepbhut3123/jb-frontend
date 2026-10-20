@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Select, Switch } from 'antd';
 import { MessageCircle, QrCode, Save } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -18,9 +18,11 @@ function DefaultDropdown({ label, type, value, options, onChange, onAdded, token
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const choices = [...new Set([...(type === 'leadSource' ? ['WhatsApp'] : []), ...options.filter((option) => option.type === type).map((option) => option.value), ...(value ? [value] : [])])];
   async function addValue() {
-    if (!draft.trim() || saving) return;
+    if (!draft.trim() || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       const result = await api.createLeadOption(token, { type, value: draft.trim() });
@@ -28,7 +30,7 @@ function DefaultDropdown({ label, type, value, options, onChange, onAdded, token
       onChange(result.option.value);
       setAdding(false); setDraft('');
     } catch (error) { toast.error(error.message); }
-    finally { setSaving(false); }
+    finally { savingRef.current = false; setSaving(false); }
   }
   return <div className="wa-field"><label>{label}<Select aria-label={label} className="antd-crm-select" value={value || undefined} placeholder={required ? 'Select a value' : 'No default'} allowClear={!required} showSearch optionFilterProp="label" options={choices.map((choice) => ({ value: choice, label: choice }))} onChange={(next) => onChange(next || '')} /></label>
     {adding ? <div className="wa-add-option"><input aria-label={`New ${label.toLowerCase()}`} maxLength={type === 'leadSource' ? 50 : 60} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="New dropdown value" /><LoadingButton type="button" loading={saving} disabled={!draft.trim()} onClick={addValue}>Add</LoadingButton><button className="link-button" type="button" disabled={saving} onClick={() => setAdding(false)}>Cancel</button></div> : <button className="link-button wa-add-link" type="button" onClick={() => setAdding(true)}>+ Add dropdown value</button>}
@@ -45,6 +47,7 @@ export default function WhatsAppWorkspace({ token }) {
   const [pollError, setPollError] = useState('');
   const [reload, setReload] = useState(0);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [action, setAction] = useState('');
   const [sample, setSample] = useState('');
   const [preview, setPreview] = useState(null);
@@ -82,13 +85,14 @@ export default function WhatsAppWorkspace({ token }) {
   }
   async function save(event) {
     event.preventDefault();
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       const result = await api.saveWhatsAppSettings(token, form);
       setForm(result.settings); setDirty(false); toast.success('WhatsApp settings saved.');
     } catch (error) { toast.error(error.message); }
-    finally { setSaving(false); }
+    finally { savingRef.current = false; setSaving(false); }
   }
   async function changeConnection(nextAction) {
     if (action) return;

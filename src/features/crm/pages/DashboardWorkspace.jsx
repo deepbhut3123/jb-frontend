@@ -212,18 +212,20 @@ function DashboardOverview({ session }) {
       try {
         const [firstLeadPage, quotationResponse, firstProductPage] = await Promise.all([
           canSeeLeads || canSeeCustomers ? api.leads(session.token, { page: 1, limit: 100 }) : Promise.resolve(null),
-          canSeeQuotations ? api.quotations(session.token) : Promise.resolve(null),
+          canSeeQuotations ? api.quotations(session.token, { page: 1, limit: 100 }) : Promise.resolve(null),
           canSeeProducts ? api.products(session.token, { page: 1, limit: 1000 }) : Promise.resolve(null),
         ]);
         const leadPages = firstLeadPage?.pagination?.totalPages || 1;
+        const quotationPages = quotationResponse?.pagination?.totalPages || 1;
         const productPages = firstProductPage?.pagination?.totalPages || 1;
-        const [remainingLeadPages, remainingProductPages] = await Promise.all([
+        const [remainingLeadPages, remainingQuotationPages, remainingProductPages] = await Promise.all([
           leadPages > 1 ? Promise.all(Array.from({ length: leadPages - 1 }, (_, index) => api.leads(session.token, { page: index + 2, limit: 100 }))) : [],
+          quotationPages > 1 ? Promise.all(Array.from({ length: quotationPages - 1 }, (_, index) => api.quotations(session.token, { page: index + 2, limit: 100 }))) : [],
           productPages > 1 ? Promise.all(Array.from({ length: productPages - 1 }, (_, index) => api.products(session.token, { page: index + 2, limit: 1000 }))) : [],
         ]);
         if (active) {
           setLeads([...(firstLeadPage?.leads || []), ...remainingLeadPages.flatMap((page) => page.leads || [])]);
-          setQuotations(quotationResponse?.quotations || []);
+          setQuotations([...(quotationResponse?.quotations || []), ...remainingQuotationPages.flatMap((page) => page.quotations || [])]);
           setProducts([...(firstProductPage?.products || []), ...remainingProductPages.flatMap((page) => page.products || [])]);
         }
       } catch (error) { if (active) toast.error(error.message); }

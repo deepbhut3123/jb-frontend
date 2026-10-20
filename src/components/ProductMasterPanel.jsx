@@ -5,6 +5,8 @@ import { toast } from 'react-toastify';
 import { API_URL, api, getSession } from '../services/api.js';
 import { exportProductsCsv, importProductsCsv } from '../utils/productCsv.js';
 import { can } from '../utils/permissions.js';
+import useInfiniteScroll from '../hooks/useInfiniteScroll.js';
+import LoadingButton from './LoadingButton.jsx';
 
 const emptyProduct = { partCode: '', description: '', hsnCode: '', brand: '', category: '', subCategory: '', subSubCategory: '', image: '', taxRate: 18, mrp: '', dollarAmount: '', marginPercent: '', isActive: true };
 const taxOptions = [0, 5, 12, 18, 28].map((value) => ({ value, label: `${value}% GST` }));
@@ -37,6 +39,8 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [searching, setSearching] = useState(false);
   const searchRequestId = useRef(0);
+  const savingRef = useRef(false);
+  const tableWrapRef = useRef(null);
   const [status, setStatus] = useState('all');
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState(emptyProduct);
@@ -49,24 +53,31 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   const [bulkImages, setBulkImages] = useState({});
   const bulkImagesRef = useRef({});
   const importInput = useRef(null);
+  const importingRef = useRef(false);
   const [importPreview, setImportPreview] = useState(null);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
   const [pricingSettings, setPricingSettings] = useState({ dollarRate: 1, multiplier: 1 });
+  const loadMoreRef = useInfiniteScroll({
+    rootRef: tableWrapRef,
+    hasMore: page < pagination.totalPages,
+    loading: searching,
+    onLoadMore: () => setPage((current) => current + 1),
+  });
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => window.clearTimeout(timer);
   }, [search]);
   useEffect(() => {
     const currentRequest = ++searchRequestId.current;
-    const params = { page, limit: 10, status: status === 'all' ? undefined : status, search: debouncedSearch };
+    const params = { page, limit: 20, status: status === 'all' ? undefined : status, search: debouncedSearch };
     setSearching(true);
     api.products(token, params)
       .then((response) => {
         if (currentRequest !== searchRequestId.current) return;
-        setProducts(response.products || []);
+        setProducts((current) => page === 1 ? (response.products || []) : [...current, ...(response.products || []).filter((product) => !current.some((item) => String(item._id) === String(product._id)))]);
         setPagination(response.pagination || { page, total: response.products?.length || 0, totalPages: 1 });
       })
       .catch((error) => currentRequest === searchRequestId.current && toast.error(error.message))
@@ -90,7 +101,18 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     const searchable = [product.partCode, product.code, product.description, product.name, product.brand, product.category, product.subCategory, product.subSubCategory, product.hsnCode].filter(Boolean).join(' ').toLowerCase();
     return matchesStatus && (!query || searchable.includes(query));
   }), [products, search, status]);
-  const displayedProducts = bulkEditing ? products.filter((product) => bulkOriginals[product._id]) : filteredProducts;
+  const displayedProducts = bulkEditing ? filteredProducts.filter((product) => bulkDrafts[product._id]) : filteredProducts;
+  useEffect(() => {
+    if (!bulkEditing || !products.length) return;
+    setBulkOriginals((current) => {
+      const additions = products.filter((product) => !current[product._id]);
+      return additions.length ? { ...current, ...Object.fromEntries(additions.map((product) => [product._id, productDraft(product)])) } : current;
+    });
+    setBulkDrafts((current) => {
+      const additions = products.filter((product) => !current[product._id]);
+      return additions.length ? { ...current, ...Object.fromEntries(additions.map((product) => [product._id, productDraft(product)])) } : current;
+    });
+  }, [bulkEditing, products]);
   const categoryOptions = useMemo(() => {
     const options = categories.map((category) => ({ value: category.name, label: category.name }));
     if (form.category && !options.some((option) => option.value === form.category)) options.push({ value: form.category, label: `${form.category} (legacy)` });
@@ -144,7 +166,9 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     setBulkDrafts((current) => ({ ...current, [id]: { ...current[id], ...changes } }));
   }
   async function saveBulkEdit() {
-    const changed = displayedProducts.filter((product) => bulkImages[product._id] || editableFields.some((key) => String(bulkDrafts[product._id]?.[key] ?? '') !== String(bulkOriginals[product._id]?.[key] ?? '')));
+    const changed = Object.entries(bulkOriginals)
+      .map(([id, original]) => ({ _id: id, ...original }))
+      .filter((product) => bulkImages[product._id] || editableFields.some((key) => String(bulkDrafts[product._id]?.[key] ?? '') !== String(bulkOriginals[product._id]?.[key] ?? '')));
     if (!changed.length) { cancelBulkEdit(); return; }
     for (const product of changed) {
       const draft = bulkDrafts[product._id];
@@ -153,6 +177,8 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
         return;
       }
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       const results = await Promise.allSettled(changed.map((product) => {
@@ -189,7 +215,7 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
         cancelBulkEdit();
         toast.success(`${updated.length} product${updated.length === 1 ? '' : 's'} updated successfully.`);
       }
-    } finally { setSaving(false); }
+    } finally { savingRef.current = false; setSaving(false); }
   }
   function bulkInput(product, key, props = {}) {
     if (key === 'mrp') {
@@ -245,6 +271,8 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   }
   async function submitImport() {
     if (!importPreview?.products.length || importPreview.errors.length) return;
+    if (importingRef.current) return;
+    importingRef.current = true;
     setImporting(true);
     const failures = [];
     let created = 0;
@@ -271,13 +299,13 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
       setImportPreview((current) => ({ ...current, result: { created, updated, failures } }));
       if (created || updated) {
         setStatus('all'); setSearch(''); setPage(1);
-        const response = await api.products(token, { page: 1, limit: 10 });
+        const response = await api.products(token, { page: 1, limit: 20 });
         setProducts(response.products || []);
         setPagination(response.pagination || { page: 1, total: response.products?.length || 0, totalPages: 1 });
       }
       if (failures.length) toast.error(`${created} created, ${updated} updated; ${failures.length} failed. See the import results.`);
       else toast.success(`${created} created and ${updated} updated successfully.`);
-    } catch (error) { toast.error(error.message); } finally { setImporting(false); }
+    } catch (error) { toast.error(error.message); } finally { importingRef.current = false; setImporting(false); }
   }
   function handleFileAction({ key }) {
     if (key === 'import') importInput.current?.click();
@@ -308,6 +336,8 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   async function submitProduct(event) {
     event.preventDefault();
     if (!form.partCode.trim() || !form.description.trim() || !form.category.trim() || (form.dollarAmount === '' && form.mrp === '')) { toast.error('Part code, description, category, and a price are required.'); return; }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       const mode = dialog.mode;
@@ -317,16 +347,16 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
       const result = mode === 'create' ? await api.createProduct(token, payload) : await api.updateProduct(token, dialog.product._id, payload);
       setProducts((current) => mode === 'create' ? [result.product, ...current.filter((product) => String(product._id) !== String(result.product._id))] : current.map((product) => String(product._id) === String(result.product._id) ? result.product : product));
       setStatus('all'); setSearch(''); setPage(1); setImageFile(null); setDialog(null); toast.success(mode === 'create' ? 'Product added successfully.' : 'Product updated successfully.');
-    } catch (error) { toast.error(error.message); } finally { setSaving(false); }
+    } catch (error) { toast.error(error.message); } finally { savingRef.current = false; setSaving(false); }
   }
   async function deleteProduct() { setSaving(true); try { await api.deleteProduct(token, dialog.product._id); setProducts((current) => current.filter((product) => product._id !== dialog.product._id)); setDialog(null); toast.success('Product deleted successfully.'); } catch (error) { toast.error(error.message); } finally { setSaving(false); } }
   const calculatedRate = (calculateFinalRate(form.dollarAmount, form.marginPercent, pricingSettings) ?? 0).toFixed(2);
   const field = (key, label, props = {}) => <>{<label>{label}<input {...props} disabled={key === 'mrp'} readOnly={key === 'mrp'} value={key === 'mrp' ? calculatedRate : form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} /></label>}{key === 'description' && <><label>Dollar amount (USD) *<input required min="0" step="any" inputMode="decimal" type="number" value={form.dollarAmount} onChange={(event) => setForm({ ...form, dollarAmount: event.target.value })} placeholder="0.00" /></label><label>Margin percentage *<input required min="0" step="any" inputMode="decimal" type="number" value={form.marginPercent} onChange={(event) => setForm({ ...form, marginPercent: event.target.value })} placeholder="0" /></label></>}</>;
   return <div className="crm-content-inner product-master-page">
     <div className="section-heading"><div><h1>Products</h1><p>Maintain the product catalogue used across the CRM.</p></div><div className="product-heading-actions"><input ref={importInput} type="file" accept=".csv,text/csv" className="product-import-input" aria-label="Choose product CSV file" onChange={selectImportFile} />{bulkEditing ? <><button className="secondary-action" type="button" disabled={saving} onClick={cancelBulkEdit}>Cancel</button><button className="primary-action" type="button" disabled={saving} onClick={saveBulkEdit}><Save size={17} />{saving ? 'Saving…' : 'Save changes'}</button></> : <><Dropdown menu={fileMenu} trigger={['click']} placement="bottomRight" overlayClassName="product-file-menu"><button className="secondary-action product-files-button" type="button" disabled={importing || exporting}><FileDown size={17} />Import / export<ChevronDown size={15} /></button></Dropdown>{canEdit && <button className="secondary-action" type="button" disabled={!filteredProducts.length} onClick={startBulkEdit}><Edit3 size={17} />Bulk edit</button>}{canCreate && <button className="primary-action" type="button" onClick={openCreate}><Plus size={17} />Add product</button>}</>}</div></div>
-    <div className="product-toolbar"><div className="user-tabs product-status-tabs"><button className={status === 'all' ? 'active' : ''} type="button" disabled={bulkEditing} onClick={() => { setStatus('all'); setPage(1); }}>All products</button><button className={status === 'active' ? 'active' : ''} type="button" disabled={bulkEditing} onClick={() => { setStatus('active'); setPage(1); }}>Active</button><button className={status === 'inactive' ? 'active' : ''} type="button" disabled={bulkEditing} onClick={() => { setStatus('inactive'); setPage(1); }}>Inactive</button></div><label className="user-search"><Search size={16} /><input value={search} disabled={bulkEditing} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search part code, description, brand" />{searching && <LoaderCircle className="module-search-spinner" size={15} aria-label="Searching" />}</label></div>
-    {bulkEditing && <p className="product-bulk-hint">Editing {displayedProducts.length} product{displayedProducts.length === 1 ? '' : 's'} on this page. Click an image to replace it, then save changes before changing pages or filters.</p>}
-    <div className="product-table-wrap"><table className={`product-table${bulkEditing ? ' bulk-editing' : ''}`}><thead><tr><th>Image</th><th>Part Code</th><th>Description</th><th>Brand</th><th>Category</th><th>Sub category</th><th>Sub-sub category</th><th>HSN Code</th><th>GST</th><th>Final rate</th>{!bulkEditing && <th className="actions-heading">Actions</th>}</tr></thead><tbody>{displayedProducts.length ? displayedProducts.map((product) => {
+    <div className="product-toolbar"><div className="user-tabs product-status-tabs"><button className={status === 'all' ? 'active' : ''} type="button" onClick={() => { setStatus('all'); setPage(1); }}>All products</button><button className={status === 'active' ? 'active' : ''} type="button" onClick={() => { setStatus('active'); setPage(1); }}>Active</button><button className={status === 'inactive' ? 'active' : ''} type="button" onClick={() => { setStatus('inactive'); setPage(1); }}>Inactive</button></div><label className="user-search"><Search size={16} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search part code, description, brand" />{searching && <LoaderCircle className="module-search-spinner" size={15} aria-label="Searching" />}</label></div>
+    {bulkEditing && <p className="product-bulk-hint">Editing {displayedProducts.length} matching product{displayedProducts.length === 1 ? '' : 's'} ({Object.keys(bulkDrafts).length} loaded this session). Search, filter, or scroll to load more products; your edits are kept until you save or cancel.</p>}
+    <div className="product-table-wrap" ref={tableWrapRef}><table className={`product-table${bulkEditing ? ' bulk-editing' : ''}`}><thead><tr><th>Image</th><th>Part Code</th><th>Description</th><th>Brand</th><th>Category</th><th>Sub category</th><th>Sub-sub category</th><th>HSN Code</th><th>GST</th><th>Final rate</th>{!bulkEditing && <th className="actions-heading">Actions</th>}</tr></thead><tbody>{displayedProducts.length ? displayedProducts.map((product) => {
       const draft = bulkDrafts[product._id];
       const rowCategory = categories.find((category) => category.name === draft?.category);
       const rowCategories = categories.map((category) => ({ value: category.name, label: category.name }));
@@ -339,13 +369,12 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
       const bulkImage = bulkImages[product._id];
       const displayedImage = bulkImage?.remove ? '' : bulkImage?.previewUrl || productImageUrl(product.image);
       return <tr key={product._id} data-record-id={product._id}><td>{bulkEditing ? <div className="product-bulk-image-control"><label className="product-bulk-image" title="Choose a new product image">{displayedImage ? <img src={displayedImage} alt={product.description || product.name || 'Product'} /> : <Package size={17} />}<span><Upload size={12} /></span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" aria-label={`Upload image for ${product.partCode || product.code || 'product'}`} onChange={(event) => chooseBulkImage(product, event)} /></label>{displayedImage && <button type="button" title="Remove product image" aria-label={`Remove image for ${product.partCode || product.code || 'product'}`} onClick={() => removeBulkImage(product)}><X size={12} /></button>}</div> : <button className={`product-table-image${product.image ? ' clickable' : ''}`} type="button" disabled={!product.image} title={product.image ? 'Preview image' : 'No image uploaded'} onClick={() => product.image && setDialog({ mode: 'preview', product })}>{product.image ? <img src={productImageUrl(product.image)} alt={product.description || product.name || 'Product'} /> : <Package size={17} />}</button>}</td><td>{bulkEditing ? bulkInput(product, 'partCode', { maxLength: 40, required: true }) : <span className="product-code">{product.partCode || product.code || '—'}</span>}</td><td>{bulkEditing ? bulkInput(product, 'description', { maxLength: 1000, required: true }) : <div className="product-name-cell"><div><strong>{product.description || product.name || '—'}</strong></div></div>}</td><td>{bulkEditing ? bulkInput(product, 'brand', { maxLength: 80 }) : product.brand || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'category', rowCategories, 'Category') : product.category || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'subCategory', rowSubCategories, 'Sub category', { disabled: !draft?.category }) : product.subCategory || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'subSubCategory', rowSubSubCategories, 'Sub-sub category', { disabled: !draft?.subCategory }) : product.subSubCategory || '—'}</td><td>{bulkEditing ? bulkInput(product, 'hsnCode', { maxLength: 20 }) : product.hsnCode || '—'}</td><td>{bulkEditing ? bulkSelect(product, 'taxRate', taxOptions, 'GST') : `${product.taxRate ?? 0}%`}</td><td>{bulkEditing ? bulkInput(product, 'mrp', { type: 'number', min: '0', step: '0.01', required: true }) : <strong className="selling-price">{currency.format(Number(product.mrp ?? product.salePrice ?? 0))}</strong>}</td>{!bulkEditing && <td><div className="table-actions">{canEdit && <button className="icon-action edit" type="button" title="Edit product" aria-label="Edit product" onClick={() => openEdit(product)}><Edit3 size={16} /></button>}{canDelete && <button className="icon-action delete" type="button" title="Delete product" aria-label="Delete product" onClick={() => setDialog({ mode: 'delete', product })}><Trash2 size={16} /></button>}</div></td>}</tr>;
-    }) : <tr><td className="empty-table" colSpan={bulkEditing ? 10 : 11}>No products match your filters.</td></tr>}</tbody></table></div>
-    <div className="lead-pagination"><span>{pagination.total || 0} product{pagination.total === 1 ? '' : 's'}</span><div><button type="button" disabled={bulkEditing || page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</button><strong>Page {page} of {pagination.totalPages || 1}</strong><button type="button" disabled={bulkEditing || page >= (pagination.totalPages || 1)} onClick={() => setPage((current) => current + 1)}>Next</button></div></div>
+    }) : <tr><td className="empty-table" colSpan={bulkEditing ? 10 : 11}>No products match your filters.</td></tr>}</tbody></table><div ref={loadMoreRef} className="infinite-scroll-status" aria-live="polite">{searching && page > 1 ? <><LoaderCircle size={15} />Loading more products…</> : <span>{displayedProducts.length} of {pagination.total || 0} products</span>}</div></div>
     {importPreview && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !importing && setImportPreview(null)}><div className="confirm-modal product-import-modal" role="dialog" aria-modal="true" aria-labelledby="product-import-title"><div className="modal-heading"><div><span className="dashboard-kicker">Product catalogue</span><h2 id="product-import-title">Import products</h2></div><button className="modal-close" type="button" disabled={importing} aria-label="Close import preview" onClick={() => setImportPreview(null)}><X size={18} /></button></div><p><strong>{importPreview.fileName}</strong></p>{importPreview.result ? <><p>{importPreview.result.created} created, {importPreview.result.updated} updated; {importPreview.result.failures.length} failed.</p>{importPreview.result.failures.length > 0 && <ul className="product-import-errors">{importPreview.result.failures.map((error) => <li key={error}>{error}</li>)}</ul>}</> : <><p>{importPreview.products.length} valid product{importPreview.products.length === 1 ? '' : 's'} ready to import. Existing Part Codes will be updated; new Part Codes will be created. Part Code, Description, Category, and MRP are required. GST Rate defaults to 18 and Active defaults to Yes when blank.</p>{importPreview.errors.length > 0 && <ul className="product-import-errors">{importPreview.errors.map((error) => <li key={error}>{error}</li>)}</ul>}{!importPreview.products.length && !importPreview.errors.length && <p>This file has only headers. Add product rows before importing.</p>}</>}<div className="modal-footer"><button className="secondary-action" type="button" disabled={importing} onClick={() => setImportPreview(null)}>{importPreview.result ? 'Close' : 'Cancel'}</button>{!importPreview.result && <button className="primary-action" type="button" disabled={importing || !!importPreview.errors.length || !importPreview.products.length} onClick={submitImport}>{importing ? 'Importing…' : `Import ${importPreview.products.length} products`}</button>}</div></div></div>}
     {dialog && ['create', 'edit'].includes(dialog.mode) && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}><form className="user-modal product-modal" onSubmit={submitProduct}><div className="modal-heading"><div><span className="dashboard-kicker">Product catalogue</span><h2>{dialog.mode === 'create' ? 'Add a new product' : 'Edit product details'}</h2></div><button className="modal-close" type="button" aria-label="Close" onClick={() => setDialog(null)}><X size={18} /></button></div><div className="product-image-upload"><div className="product-image-preview">{imagePreview ? <img src={imagePreview} alt="Product preview" /> : <Package size={28} />}</div><div className="product-image-actions"><label className="secondary-action product-image-button"><Plus size={15} />{imageFile || form.image ? 'Change image' : 'Upload image'}<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={chooseImage} /></label>{imagePreview && <button className="secondary-action product-image-remove" type="button" onClick={removeImage}><Trash2 size={15} />Remove image</button>}</div><small>PNG, JPG, WEBP or GIF · maximum 5 MB</small></div><div className="modal-fields product-fields">
       <label>Part Code *<input required maxLength="40" value={form.partCode} onChange={(event) => setForm({ ...form, partCode: event.target.value.toUpperCase() })} placeholder="Example: JB-001" /></label>
       {field('description', 'Desc *', { required: true, maxLength: 1000, placeholder: 'Enter product description' })}{field('hsnCode', 'HSN Code', { maxLength: 20, placeholder: 'Enter HSN code' })}{field('brand', 'Brand', { maxLength: 80, placeholder: 'Enter brand' })}<label>Category *<ProductSelect value={form.category} options={categoryOptions} placeholder="Select category" onChange={(category) => setForm({ ...form, category, subCategory: '', subSubCategory: '' })} /></label><label>Sub category<ProductSelect value={form.subCategory} options={subCategoryOptions} placeholder={form.category ? 'Select sub category' : 'Select category first'} disabled={!form.category} onChange={(subCategory) => setForm({ ...form, subCategory, subSubCategory: '' })} /></label><label>Sub-sub category<ProductSelect value={form.subSubCategory} options={subSubCategoryOptions} placeholder={form.subCategory ? 'Select sub-sub category' : 'Select sub category first'} disabled={!form.subCategory} onChange={(subSubCategory) => setForm({ ...form, subSubCategory })} /></label><label>GST *<ProductSelect value={form.taxRate} options={taxOptions} onChange={(taxRate) => setForm({ ...form, taxRate })} /></label>{field('mrp', 'MRP (₹) *', { required: true, min: '0', step: '0.01', type: 'number', placeholder: '0.00' })}
-    </div><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" disabled={saving} type="submit">{saving ? 'Saving…' : dialog.mode === 'create' ? 'Create product' : 'Save changes'}</button></div></form></div>}
+    </div><div className="modal-footer"><button className="secondary-action" disabled={saving} type="button" onClick={() => setDialog(null)}>Cancel</button><LoadingButton loading={saving} loadingText={dialog.mode === 'create' ? 'Creating product…' : 'Saving changes…'}>{dialog.mode === 'create' ? 'Create product' : 'Save changes'}</LoadingButton></div></form></div>}
     {dialog?.mode === 'preview' && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}><div className="confirm-modal product-preview-modal"><div className="modal-heading"><div><span className="dashboard-kicker">Product image</span><h2>{dialog.product.description || dialog.product.name || 'Product preview'}</h2></div><button className="modal-close" type="button" aria-label="Close image preview" onClick={() => setDialog(null)}><X size={18} /></button></div><img className="product-large-preview" src={productImageUrl(dialog.product.image)} alt={dialog.product.description || dialog.product.name || 'Product'} /></div></div>}
     {dialog?.mode === 'delete' && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}><div className="confirm-modal"><div className="confirm-icon"><Trash2 size={20} /></div><h2>Delete this product?</h2><p>This will permanently remove <strong>{dialog.product.description || dialog.product.name}</strong> from Product Master.</p><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="danger-action" disabled={saving} type="button" onClick={deleteProduct}>{saving ? 'Deleting…' : 'Delete product'}</button></div></div></div>}
   </div>;

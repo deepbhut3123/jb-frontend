@@ -5,6 +5,8 @@ import { Edit3, LoaderCircle, Plus, Search, ShieldCheck, Trash2, UserRound, X } 
 import { api, getSession } from "../../../services/api.js";
 import { can, isAdministrator } from "../../../utils/permissions.js";
 import { formatDisplayDate } from "../CrmUtils.jsx";
+import useInfiniteScroll from "../../../hooks/useInfiniteScroll.js";
+import LoadingButton from "../../../components/LoadingButton.jsx";
 
 function UsersPanel({ users, setUsers, token }) {
   const currentUser = getSession()?.user;
@@ -16,8 +18,17 @@ function UsersPanel({ users, setUsers, token }) {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [searching, setSearching] = useState(false);
   const searchRequestId = useRef(0);
+  const savingRef = useRef(false);
+  const tableWrapRef = useRef(null);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [saving, setSaving] = useState(false);
+  const loadMoreRef = useInfiniteScroll({
+    rootRef: tableWrapRef,
+    hasMore: page < pagination.totalPages,
+    loading: searching,
+    onLoadMore: () => setPage((current) => current + 1),
+  });
   const [dialog, setDialog] = useState(null);
   const [roleOptions, setRoleOptions] = useState([]);
   const [form, setForm] = useState({
@@ -61,7 +72,7 @@ function UsersPanel({ users, setUsers, token }) {
     api.users(token, { page, limit: 10, role: tab === "all" ? undefined : tab, search: debouncedSearch })
       .then((response) => {
         if (currentRequest !== searchRequestId.current) return;
-        setUsers(response.users || []);
+        setUsers((current) => page === 1 ? (response.users || []) : [...current, ...(response.users || []).filter((user) => !current.some((item) => String(item._id) === String(user._id)))]);
         setPagination(response.pagination || { total: response.users?.length || 0, totalPages: 1 });
       })
       .catch((error) => currentRequest === searchRequestId.current && toast.error(error.message))
@@ -88,6 +99,9 @@ function UsersPanel({ users, setUsers, token }) {
   async function submitUser(event) {
     event.preventDefault();
     if (!selectedRole) { toast.error("Select a role created in Roles & Permissions."); return; }
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       const result =
         dialog.mode === "create"
@@ -108,6 +122,9 @@ function UsersPanel({ users, setUsers, token }) {
       );
     } catch (error) {
       toast.error(error.message);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   }
   async function deleteUser() {
@@ -170,8 +187,7 @@ function UsersPanel({ users, setUsers, token }) {
           {searching && <LoaderCircle className="module-search-spinner" size={15} aria-label="Searching" />}
         </label>
       </div>
-      <div className="lead-pagination"><span>{pagination.total || 0} account{pagination.total === 1 ? "" : "s"}</span><div><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</button><strong>Page {page} of {pagination.totalPages || 1}</strong><button type="button" disabled={page >= (pagination.totalPages || 1)} onClick={() => setPage((current) => current + 1)}>Next</button></div></div>
-      <div className="users-table-wrap">
+      <div className="users-table-wrap" ref={tableWrapRef}>
         <table className="users-table">
           <thead>
             <tr>
@@ -239,6 +255,7 @@ function UsersPanel({ users, setUsers, token }) {
             )}
           </tbody>
         </table>
+        <div ref={loadMoreRef} className="infinite-scroll-status" aria-live="polite">{searching && page > 1 ? <><LoaderCircle size={15} />Loading more accounts…</> : <span>{filteredUsers.length} of {pagination.total || 0} accounts</span>}</div>
       </div>
       {dialog?.mode !== "delete" && dialog && (
         <div
@@ -345,9 +362,9 @@ function UsersPanel({ users, setUsers, token }) {
               >
                 Cancel
               </button>
-              <button className="primary-action" type="submit">
+              <LoadingButton loading={saving} loadingText={dialog.mode === "create" ? "Creating user…" : "Saving changes…"}>
                 {dialog.mode === "create" ? "Create user" : "Save changes"}
-              </button>
+              </LoadingButton>
             </div>
           </form>
         </div>
