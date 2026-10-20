@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Select } from "antd";
+import { AutoComplete, Select } from "antd";
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
 import { CopyPlus, Download, Edit3, LoaderCircle, Mail, Phone, Plus, Search, Trash2, X } from "lucide-react";
@@ -8,9 +8,11 @@ import { can, isAdministrator } from "../../../utils/permissions.js";
 import { AntDatePicker, LeadDropdown, PhoneLink } from "../CrmControls.jsx";
 import { formatDisplayDate } from "../CrmUtils.jsx";
 import { navigate } from '../../../utils/navigation.js';
+import useInfiniteScroll from '../../../hooks/useInfiniteScroll.js';
+import LoadingButton from '../../../components/LoadingButton.jsx';
 
 const quotationStatuses = ["Draft", "Sent", "Accepted", "Rejected"];
-const emptyItem = { productId: "", description: "", quantity: 1, discountPercent: 0, discountAmount: 0, discountMode: "percent" };
+const emptyItem = { productId: "", productName: "", description: "", quantity: 1, unitPrice: "", taxRate: 18, discountPercent: 0, discountAmount: 0, discountMode: "percent" };
 const emptyForm = { leadId: "", contactPersonId: "", contactPersonKey: "", contactName: "", contactRole: "", company: "", email: "", phone: "", freightPacking: 0, generalDiscountPercent: 0, generalDiscountAmount: 0, generalDiscountMode: "percent", items: [emptyItem], quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: "" };
 
 function indianMobileDigits(value) {
@@ -21,7 +23,7 @@ function indianMobileDigits(value) {
 }
 
 function savedQuotationItem(item) {
-  return { productId: item.productId, description: item.description ?? item.productName ?? "", quantity: item.quantity, discountPercent: item.discountPercent || 0, discountAmount: item.discountAmount || 0, discountMode: "percent" };
+  return { productId: item.productId || "", productName: item.productCode || item.productName || "", description: item.description ?? item.productName ?? "", quantity: item.quantity, unitPrice: item.unitPrice ?? "", taxRate: item.taxRate ?? 18, discountPercent: item.discountPercent || 0, discountAmount: item.discountAmount || 0, discountMode: "percent" };
 }
 
 function formatCurrency(value) {
@@ -57,7 +59,7 @@ function revisionChanges(current, previous) {
   if (Number(current.amount || 0) !== Number(previous.amount || 0)) changes.push(`Total changed from ${formatCurrency(previous.amount)} to ${formatCurrency(current.amount)}`);
   if (current.status !== previous.status) changes.push(`Status changed from ${previous.status} to ${current.status}`);
   if (current.contactName !== previous.contactName || current.contactRole !== previous.contactRole || current.company !== previous.company || current.email !== previous.email || current.phone !== previous.phone) changes.push("Company or person details updated");
-  const itemSnapshot = (quotation) => JSON.stringify((quotation.items || []).map((item) => ({ productId: String(item.productId), description: item.description || "", quantity: Number(item.quantity), unitPrice: Number(item.unitPrice), discountAmount: Number(item.discountAmount || 0) })).sort((a, b) => a.productId.localeCompare(b.productId)));
+  const itemSnapshot = (quotation) => JSON.stringify((quotation.items || []).map((item) => ({ productId: String(item.productId), productName: item.productName || "", description: item.description || "", quantity: Number(item.quantity), unitPrice: Number(item.unitPrice), taxRate: Number(item.taxRate || 0), discountAmount: Number(item.discountAmount || 0) })).sort((a, b) => `${a.productId}-${a.productName}`.localeCompare(`${b.productId}-${b.productName}`)));
   if (itemSnapshot(current) !== itemSnapshot(previous)) changes.push("Product details or pricing updated");
   return changes.length ? changes : ["Revision saved without pricing changes"];
 }
@@ -77,17 +79,27 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("lookup") || "");
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const searchRequestId = useRef(0);
+  const tableWrapRef = useRef(null);
   const [pendingStatuses, setPendingStatuses] = useState({});
   const [pendingDownloads, setPendingDownloads] = useState({});
   const [form, setForm] = useState(emptyForm);
   const handledDeepLink = useRef(false);
+  const loadMoreRef = useInfiniteScroll({
+    rootRef: tableWrapRef,
+    hasMore: page < pagination.totalPages,
+    loading: searching,
+    onLoadMore: () => setPage((current) => current + 1),
+  });
   const selectedLead = useMemo(() => leads.find((lead) => String(lead._id) === String(form.leadId)) || null, [form.leadId, leads]);
   const selectedLeadPeople = selectedLead?.companyPersons || [];
   const productOptions = useMemo(() => products.filter((product) => product.isActive !== false).map((product) => {
     const code = product.partCode || product.code || product.name || "Product";
     const description = product.description || product.name || "No description available";
     const price = Number(product.finalRate ?? product.mrp ?? product.salePrice ?? 0);
-    return { value: product._id, label: code, description, price, searchText: `${code} ${description} ${product.brand || ""} ${price}` };
+    return { value: code, label: code, productId: product._id, description, price, searchText: `${code} ${description} ${product.brand || ""} ${price}` };
   }), [products]);
   const productById = useMemo(() => new Map(products.map((product) => [String(product._id), product])), [products]);
   const quotationGroups = useMemo(() => {
@@ -121,14 +133,13 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
       else { params.dateFrom = dayjs().subtract(Number(dateRange) - 1, "day").format("YYYY-MM-DD"); params.dateTo = dayjs().add(1, "day").format("YYYY-MM-DD"); }
     }
     if (debouncedSearch) params.search = debouncedSearch;
-    let active = true;
+    const currentRequest = ++searchRequestId.current;
     setSearching(true);
     api.quotations(token, params, { background: true }).then((response) => {
-      if (!active) return;
-      setQuotations(response.quotations || []);
+      if (currentRequest !== searchRequestId.current) return;
+      setQuotations((current) => page === 1 ? (response.quotations || []) : [...current, ...(response.quotations || []).filter((quotation) => !current.some((item) => String(item._id) === String(quotation._id)))]);
       setPagination(response.pagination || { total: response.quotations?.length || 0, totalPages: 1 });
-    }).catch((error) => active && toast.error(error.message)).finally(() => active && setSearching(false));
-    return () => { active = false; };
+    }).catch((error) => currentRequest === searchRequestId.current && toast.error(error.message)).finally(() => { if (currentRequest === searchRequestId.current) setSearching(false); });
   }, [dateRange, debouncedSearch, page, setQuotations, token]);
   function commitQuotations(updater) {
     setQuotations((current) => {
@@ -207,14 +218,20 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
   async function submitQuotation(event) {
     event.preventDefault();
     if (form.phone && !/^\d{10}$/.test(form.phone)) return toast.error("Enter a valid 10-digit mobile number.");
+    const invalidCustomItem = form.items.find((item) => !item.productId && (!item.productName.trim() || item.unitPrice === "" || !Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0));
+    if (invalidCustomItem) return toast.error("Enter a product name and valid rate for each custom quotation product.");
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
-      const payload = { ...form, phone: form.phone ? `+91${form.phone}` : "", generalDiscountPercent: effectiveGeneralDiscountPercent, generalDiscountAmount: generalDiscount, items: form.items.map((item) => ({ productId: item.productId, description: item.description, quantity: item.quantity, discountPercent: itemEffectiveDiscountPercent(item), discountAmount: itemDiscount(item), discountMode: item.discountMode })) };
+      const payload = { ...form, phone: form.phone ? `+91${form.phone}` : "", generalDiscountPercent: effectiveGeneralDiscountPercent, generalDiscountAmount: generalDiscount, items: form.items.map((item) => ({ productId: item.productId, productName: item.productName, description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, taxRate: item.taxRate, discountPercent: itemEffectiveDiscountPercent(item), discountAmount: itemDiscount(item), discountMode: item.discountMode })) };
       const result = dialog.mode === "edit" ? await api.updateQuotation(token, dialog.quotation._id, payload) : await api.createQuotation(token, payload);
       commitQuotations((current) => dialog.mode === "edit" ? current.map((item) => item._id === result.quotation._id ? result.quotation : item) : [result.quotation, ...current]);
       const message = dialog.mode === "revise" ? "Revised quotation created." : dialog.mode === "create" ? "Quotation added successfully." : "Quotation updated successfully.";
       setDialog(null);
       toast.success(message);
     } catch (error) { toast.error(error.message); }
+    finally { savingRef.current = false; setSaving(false); }
   }
 
   async function deleteQuotation() {
@@ -247,17 +264,27 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
 
   function selectProduct(index, productId) {
     const product = products.find((entry) => String(entry._id) === String(productId));
-    updateItem(index, { productId, description: product?.description || product?.name || "" });
+    if (!product) return;
+    updateItem(index, { productId, productName: product.partCode || product.code || product.name || "Product", description: product.description || product.name || "", unitPrice: Number(product.finalRate ?? product.mrp ?? product.salePrice ?? 0), taxRate: product.taxRate ?? 0 });
+  }
+
+  function typeCustomProduct(index, productName) {
+    updateItem(index, { productId: "", productName, unitPrice: "", taxRate: 18 });
+  }
+
+  function changeProduct(index, productName) {
+    const catalogOption = productOptions.find((option) => option.value === productName);
+    if (catalogOption) selectProduct(index, catalogOption.productId);
+    else typeCustomProduct(index, productName);
+  }
+
+  function itemUnitPrice(item) {
+    const product = products.find((entry) => String(entry._id) === String(item.productId));
+    return Number((product ? product.finalRate ?? product.mrp ?? product.salePrice : item.unitPrice) || 0);
   }
 
   function itemSubtotal(item) {
-    const product = products.find((entry) => String(entry._id) === String(item.productId));
-    return product ? Number(item.quantity || 0) * Number(product.finalRate ?? product.mrp ?? product.salePrice ?? 0) : 0;
-  }
-
-  function itemMinimumPrice(item) {
-    const product = productById.get(String(item.productId));
-    return product ? Number(item.quantity || 0) * Number(product.convertedAmount ?? 0) : 0;
+    return Number(item.quantity || 0) * itemUnitPrice(item);
   }
 
   function itemDiscount(item) {
@@ -272,21 +299,24 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
     return subtotal > 0 ? Number(((itemDiscount(item) / subtotal) * 100).toFixed(6)) : 0;
   }
 
-  function updateItemDiscountAmount(index, value) {
-    if (!/^\d*(\.\d{0,2})?$/.test(value)) return;
-    const item = form.items[index];
-    if (value !== "" && Number(value) > itemSubtotal(item)) return;
-    updateItem(index, { discountAmount: value, discountPercent: value === "" ? "" : itemEffectiveDiscountPercent({ ...item, discountAmount: value, discountMode: "amount" }), discountMode: "amount" });
-  }
-
   function updateItemDiscountPercent(index, value) {
     if (!/^\d{0,3}(\.\d{0,2})?$/.test(value) || (value !== "" && Number(value) > 100)) return;
     const item = form.items[index];
-    updateItem(index, { discountPercent: value, discountAmount: value === "" ? "" : Number((itemSubtotal(item) * Number(value) / 100).toFixed(2)), discountMode: "percent" });
+    updateItem(index, { discountPercent: value, discountAmount: value === "" ? "" : Number((itemSubtotal(item) * Number(value) / 100).toFixed(2)), discountMode: "percent", rateInput: undefined });
+  }
+
+  function updateItemRate(index, value) {
+    if (!/^\d*(\.\d{0,2})?$/.test(value)) return;
+    const item = form.items[index];
+    const mrp = itemUnitPrice(item);
+    if (value !== "" && Number(value) > mrp) return;
+    const rate = value === "" ? mrp : Number(value);
+    const discountPercent = mrp > 0 ? Number((((mrp - rate) / mrp) * 100).toFixed(6)) : 0;
+    const discountAmount = Number(((mrp - rate) * Number(item.quantity || 0)).toFixed(2));
+    updateItem(index, { discountPercent, discountAmount, discountMode: "percent", rateInput: value });
   }
 
   const quotationSubtotal = form.items.reduce((total, item) => total + itemSubtotal(item), 0);
-  const minimumPrice = form.items.reduce((total, item) => total + itemMinimumPrice(item), 0);
   const productDiscount = form.items.reduce((total, item) => total + itemDiscount(item), 0);
   const productsAmount = Math.max(quotationSubtotal - productDiscount, 0);
   const generalDiscount = form.generalDiscountMode === "amount"
@@ -299,7 +329,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
   const productGst = form.items.reduce((total, item) => {
     const product = products.find((entry) => String(entry._id) === String(item.productId));
     const lineAmount = Math.max(itemSubtotal(item) - itemDiscount(item), 0);
-    return total + lineAmount * generalDiscountFactor * Number(product?.taxRate || 0) / 100;
+    return total + lineAmount * generalDiscountFactor * Number(product?.taxRate ?? item.taxRate ?? 0) / 100;
   }, 0);
   const gstTax = Number((productGst + freightPacking * 0.18).toFixed(2));
   const grandTotal = Number((quotationTotal + gstTax).toFixed(2));
@@ -332,7 +362,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
         <label className="user-search quotation-search"><Search size={16} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search quotations" />{searching && <LoaderCircle className="quotation-search-spinner" size={15} aria-label="Searching" />}</label>
         <label className="lead-date-filter"><span>Date</span><Select className="antd-crm-select quotation-date-select" value={dateRange} showSearch optionFilterProp="label" onChange={(value) => { setDateRange(value); setPage(1); }} options={[{ value: "month", label: "Current month" }, { value: "lastMonth", label: "Last month" }, { value: "lastYear", label: "Last year" }, { value: "today", label: "Today" }, { value: "7", label: "Last 7 days" }, { value: "30", label: "Last 30 days" }, { value: "all", label: "All time" }]} /></label>
       </div>
-      <div className="quotation-table-wrap">
+      <div className="quotation-table-wrap" ref={tableWrapRef}>
         <table className="quotation-table">
           <thead><tr><th>Company</th><th>Version</th><th>Person</th><th>Minimum price</th>{showMargin && <th>Margin %</th>}<th>Amount</th><th>Status</th><th>Quotation date</th><th>Created by</th><th className="actions-heading">Actions</th></tr></thead>
           <tbody>
@@ -349,8 +379,8 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
             ); }) : <tr><td className="empty-table" colSpan={showMargin ? 10 : 9}>No quotations found for this filter.</td></tr>}
           </tbody>
         </table>
+        <div ref={loadMoreRef} className="infinite-scroll-status" aria-live="polite">{searching && page > 1 ? <><LoaderCircle size={15} />Loading more quotations…</> : <span>{quotations.length} of {pagination.total || 0} quotations</span>}</div>
       </div>
-      <div className="lead-pagination"><span>{pagination.total || 0} quotation{pagination.total === 1 ? "" : "s"}</span><div><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</button><strong>Page {page} of {pagination.totalPages || 1}</strong><button type="button" disabled={page >= (pagination.totalPages || 1)} onClick={() => setPage((current) => current + 1)}>Next</button></div></div>
       {dialog?.mode === "history" && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}>
           <div className="user-modal quotation-history-modal">
@@ -360,7 +390,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
                 <article className={index === 0 ? "latest" : ""} key={quotation._id}>
                   <div className="quotation-history-heading"><div><strong>{Number(quotation.revisionNumber) > 0 ? `Revision ${quotation.revisionNumber}` : "Original quotation"}</strong>{index === 0 && <span>Latest</span>}</div><div><button className="icon-action download" type="button" title="Download this version as PDF" aria-label={`Download ${Number(quotation.revisionNumber) > 0 ? `revision ${quotation.revisionNumber}` : "original quotation"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={15} /></button><time>{formatDisplayDate(quotation.quotationDate || quotation.createdAt)}</time></div></div>
                   <div className="quotation-history-summary"><span>Total <strong>{formatCurrency(quotation.amount)}</strong></span><span>General discount <strong>{quotation.generalDiscountPercent || 0}%</strong></span><span>Status <strong>{quotation.status}</strong></span></div>
-                  <div className="quotation-history-products">{quotation.items?.map((item) => { const product = productById.get(String(item.productId)); return <span key={`${quotation._id}-${item.productId}`}>{quotationItemDescription(item)} × {item.quantity} at {formatCurrency(quotationItemRate(item))}{showMargin && <> · Margin {Number(product?.marginPercent || 0).toLocaleString("en-IN")}%</>}</span>; })}</div>
+                  <div className="quotation-history-products">{quotation.items?.map((item, itemIndex) => { const product = productById.get(String(item.productId)); return <span key={`${quotation._id}-${item.productId || "custom"}-${itemIndex}`}>{quotationItemDescription(item)} × {item.quantity} at {formatCurrency(quotationItemRate(item))}{showMargin && <> · Margin {product ? `${Number(product.marginPercent || 0).toLocaleString("en-IN")}%` : "—"}</>}</span>; })}</div>
                   <div className="quotation-change-list"><strong>Changes in this version</strong>{revisionChanges(quotation, previous).map((change) => <span key={change}>{change}</span>)}</div>
                 </article>
               ))}
@@ -371,9 +401,9 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
       )}
       {dialog?.mode === "delete" && <div className="modal-backdrop" role="presentation"><div className="confirm-modal"><div className="confirm-icon"><Trash2 size={20} /></div><h2>Delete this quotation?</h2><p>This will permanently remove the quotation for <strong>{dialog.quotation.company || "this company"}</strong>.</p><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="danger-action" type="button" onClick={deleteQuotation}>Delete quotation</button></div></div></div>}
       {dialog && ["create", "edit", "revise"].includes(dialog.mode) && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && setDialog(null)}>
           <form className="user-modal quotation-modal" onSubmit={submitQuotation}>
-            <div className="modal-heading"><div><span className="dashboard-kicker">Quotation workspace</span><h2>{dialog.mode === "create" ? "Add a new quotation" : dialog.mode === "revise" ? `Create revision ${(dialog.quotation.revisionNumber || 0) + 1}` : "Edit quotation"}</h2></div><button className="modal-close" type="button" aria-label="Close" onClick={() => setDialog(null)}><X size={18} /></button></div>
+            <div className="modal-heading"><div><span className="dashboard-kicker">Quotation workspace</span><h2>{dialog.mode === "create" ? "Add a new quotation" : dialog.mode === "revise" ? `Create revision ${(dialog.quotation.revisionNumber || 0) + 1}` : "Edit quotation"}</h2></div><button className="modal-close" disabled={saving} type="button" aria-label="Close" onClick={() => setDialog(null)}><X size={18} /></button></div>
             <div className="modal-fields">
               <label className="full-field">Company lead<Select className="antd-crm-select quotation-lead-select" showSearch optionFilterProp="label" value={form.leadId || undefined} placeholder="Select a company" disabled={dialog.mode !== "create" && Boolean(form.leadId)} options={leads.map((lead) => ({ value: lead._id, label: (lead.company && lead.company !== "N/A" ? lead.company : "Unnamed company").toLocaleUpperCase("en-IN") }))} popupRender={(menu) => <><div className="quotation-company-menu">{menu}</div><button className="dropdown-management-action quotation-add-company" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => navigate("/leads?create=1")}><Plus size={14} /> Add company</button></>} onChange={(leadId) => setForm((current) => applyLead(leadId, current))} /></label>
               <label className="full-field">Person<Select className="antd-crm-select quotation-lead-select" allowClear showSearch optionFilterProp="label" value={form.contactPersonKey || undefined} placeholder={!form.leadId ? "Select a company first" : selectedLeadPeople.length ? "Select a person" : "No people added to this company"} disabled={!form.leadId || !selectedLeadPeople.length} options={selectedLeadPeople.map((person, index) => ({ value: person._id || `legacy-${index}`, label: `${person.name || `Person ${index + 1}`}${person.role ? ` - ${person.role}` : ""}${person.number ? ` - ${person.number}` : ""}` }))} onChange={applyPerson} onClear={() => applyPerson("")} /></label>
@@ -385,16 +415,16 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
               <label>Email address<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="person@company.com" /></label>
               <label>Phone number<div className="quotation-phone-input"><span>+91</span><input inputMode="numeric" type="tel" maxLength="10" pattern="[0-9]{10}" title="Enter exactly 10 digits" value={form.phone} onChange={(event) => setForm({ ...form, phone: indianMobileDigits(event.target.value) })} placeholder="10-digit mobile number" /></div></label>
               <div className="full-field quotation-items">
-                <div className="quotation-items-heading"><strong>Products from Product Master</strong><button className="secondary-action" type="button" onClick={() => setForm({ ...form, items: [...form.items, { ...emptyItem }] })}><Plus size={14} />Add product</button></div>
-                <div className={`quotation-item-labels${showMargin ? " with-margin" : ""}`} aria-hidden="true"><span>Product</span><span>Description</span><span>Quantity</span><span>Discount %</span><span>Discount value</span><span>Minimum price</span>{showMargin && <span>Margin %</span>}<span>Rate</span><span>Amount</span><span /></div>
-                {form.items.map((item, index) => { const product = productById.get(String(item.productId)); const subtotal = itemSubtotal(item); const discount = itemDiscount(item); const amount = Math.max(subtotal - discount, 0); const quantity = Number(item.quantity || 0); const rate = quantity > 0 ? amount / quantity : 0; return <div className={`quotation-item-row${showMargin ? " with-margin" : ""}`} key={`${index}-${item.productId}`}><Select className="antd-crm-select quotation-product-select" showSearch optionFilterProp="searchText" value={item.productId || undefined} placeholder="Select product" options={productOptions} labelRender={({ value, label }) => <span className="quotation-selected-product" title={productOptions.find((option) => String(option.value) === String(value))?.description}>{label}</span>} optionRender={(option) => <div className="quotation-product-option" title={option.data.description}><strong>{option.data.label}</strong><small>Rs. {option.data.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</small></div>} onChange={(productId) => selectProduct(index, productId)} /><textarea maxLength={1000} rows={2} value={item.description || ""} onChange={(event) => updateItem(index, { description: event.target.value })} placeholder="Product description (editable)" /><input required min="0.01" step="0.01" type="number" value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} placeholder="Qty" /><input aria-label={`Discount percentage for item ${index + 1}`} inputMode="decimal" type="text" value={item.discountMode === "amount" ? itemEffectiveDiscountPercent(item) : item.discountPercent} onFocus={(event) => event.target.select()} onChange={(event) => updateItemDiscountPercent(index, event.target.value)} placeholder="0%" /><input aria-label={`Discount amount for item ${index + 1}`} inputMode="decimal" type="text" value={item.discountMode === "percent" ? discount.toFixed(2) : item.discountAmount} onFocus={(event) => event.target.select()} onChange={(event) => updateItemDiscountAmount(index, event.target.value)} placeholder="0.00" /><span className="quotation-minimum-price" title="Converted price × quantity, before margin and multiplier">{formatCurrency(itemMinimumPrice(item))}</span>{showMargin && <span className="quotation-margin-percent">{Number(product?.marginPercent || 0).toLocaleString("en-IN")}%</span>}<span>{formatCurrency(rate)}</span><span className="quotation-line-total">{formatCurrency(amount)}</span>{form.items.length > 1 ? <button className="icon-action delete" type="button" title="Remove product" onClick={() => setForm({ ...form, items: form.items.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={15} /></button> : <span />}</div>; })}
-                <div className="quotation-totals"><span className="quotation-minimum-total" title="Sum of converted prices × quantities, before margin and multiplier">Minimum price <strong>Rs. {minimumPrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span>Products total <strong>Rs. {productsAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span>Freight / Packing <strong>+ Rs. {freightPacking.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span>General discount ({effectiveGeneralDiscountPercent}%) <strong>- Rs. {generalDiscount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span>Taxable total <strong>Rs. {quotationTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span>GST tax <strong>+ Rs. {gstTax.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span className="quotation-total">Grand total <strong>Rs. {grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span></div>
+                <div className="quotation-items-heading"><strong>Products</strong><small>Select from Product Master or type a quotation-only product name.</small><button className="secondary-action" type="button" onClick={() => setForm({ ...form, items: [...form.items, { ...emptyItem }] })}><Plus size={14} />Add product</button></div>
+                <div className="quotation-item-labels" aria-hidden="true"><span>Product</span><span>Description</span><span>MRP</span><span>Quantity</span><span>GST %</span><span>Discount %</span><span>Rate</span><span>Amount</span><span /></div>
+                {form.items.map((item, index) => { const subtotal = itemSubtotal(item); const discount = itemDiscount(item); const amount = Math.max(subtotal - discount, 0); const product = products.find((entry) => String(entry._id) === String(item.productId)); const mrp = itemUnitPrice(item); const effectiveRate = Number(item.quantity || 0) > 0 ? amount / Number(item.quantity) : mrp; const rateValue = item.rateInput ?? effectiveRate.toFixed(2); return <div className="quotation-item-row" key={`${index}-${item.productId}`}><AutoComplete className="antd-crm-select quotation-product-select" value={item.productName || ""} placeholder="Select or type product" options={productOptions} filterOption={(input, option) => option.searchText.toLowerCase().includes(input.toLowerCase())} optionRender={(option) => <div className="quotation-product-option" title={option.data.description}><strong>{option.data.label}</strong><small>MRP: Rs. {option.data.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</small></div>} onChange={(productName) => changeProduct(index, productName)} /><textarea maxLength={1000} rows={2} value={item.description || ""} onChange={(event) => updateItem(index, { description: event.target.value })} placeholder="Product description (editable)" />{item.productId ? <span className="quotation-rate-display">{formatCurrency(mrp)}</span> : <input className="quotation-custom-rate" aria-label={`MRP for custom product ${index + 1}`} required min="0" step="0.01" type="number" value={item.unitPrice} onChange={(event) => updateItem(index, { unitPrice: event.target.value, rateInput: undefined })} placeholder="MRP" />}<input required min="0.01" step="0.01" type="number" value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} placeholder="Qty" /><input required min="0" max="100" step="any" type="number" value={item.productId ? product?.taxRate ?? 0 : item.taxRate} disabled={Boolean(item.productId)} onChange={(event) => updateItem(index, { taxRate: event.target.value })} placeholder="GST" /><input aria-label={`Discount percentage for item ${index + 1}`} inputMode="decimal" type="text" value={item.discountMode === "amount" ? itemEffectiveDiscountPercent(item) : item.discountPercent} onFocus={(event) => event.target.select()} onChange={(event) => updateItemDiscountPercent(index, event.target.value)} placeholder="0%" /><input aria-label={`Rate after discount for item ${index + 1}`} inputMode="decimal" type="text" value={rateValue} onFocus={(event) => event.target.select()} onBlur={() => updateItem(index, { rateInput: undefined })} onChange={(event) => updateItemRate(index, event.target.value)} placeholder="Rate" /><span className="quotation-line-total">{formatCurrency(amount)}</span>{form.items.length > 1 ? <button className="icon-action delete" type="button" title="Remove product" onClick={() => setForm({ ...form, items: form.items.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={15} /></button> : <span />}</div>; })}
+                <div className="quotation-totals"><span>Products total <strong>Rs. {productsAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span>Freight / Packing <strong>+ Rs. {freightPacking.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span>General discount ({effectiveGeneralDiscountPercent}%) <strong>- Rs. {generalDiscount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span>Taxable total <strong>Rs. {quotationTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span>GST tax <strong>+ Rs. {gstTax.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span><span className="quotation-total">Grand total <strong>Rs. {grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span></div>
               </div>
               <div className="full-field quotation-final-discount"><label>General discount %<input aria-label="General discount percentage" inputMode="decimal" type="text" value={form.generalDiscountMode === "amount" ? effectiveGeneralDiscountPercent : form.generalDiscountPercent} onFocus={(event) => event.target.select()} onChange={(event) => updateFinalDiscountPercent(event.target.value)} placeholder="0%" /></label><label>General discount amount<input aria-label="General discount amount" inputMode="decimal" type="text" value={form.generalDiscountMode === "percent" ? generalDiscount.toFixed(2) : form.generalDiscountAmount} onFocus={(event) => event.target.select()} onChange={(event) => updateFinalDiscountAmount(event.target.value)} placeholder="Rs. 0.00" /></label></div>
               <label>Freight / Packing amount<input min="0" step="0.01" type="number" value={form.freightPacking} onChange={(event) => setForm({ ...form, freightPacking: event.target.value })} placeholder="0.00" /></label>
               <label>Status<LeadDropdown value={form.status} options={quotationStatuses} onChange={(status) => setForm({ ...form, status })} /></label>
             </div>
-            <div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" type="submit" disabled={!products.length || !form.leadId}>{dialog.mode === "create" ? "Create quotation" : dialog.mode === "revise" ? "Create revised quote" : "Save changes"}</button></div>
+            <div className="modal-footer"><button className="secondary-action" type="button" disabled={saving} onClick={() => setDialog(null)}>Cancel</button><LoadingButton loading={saving} loadingText={dialog.mode === "edit" ? "Saving changes…" : "Creating quotation…"} disabled={!form.leadId}>{dialog.mode === "create" ? "Create quotation" : dialog.mode === "revise" ? "Create revised quote" : "Save changes"}</LoadingButton></div>
           </form>
         </div>
       )}

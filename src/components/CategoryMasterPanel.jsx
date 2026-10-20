@@ -1,5 +1,5 @@
 import { Archive, Atom, Award, Badge, Banknote, Battery, Bike, BookOpen, Boxes, BriefcaseBusiness, Building2, Car, ChefHat, ChevronDown, Coffee, Cpu, Crown, Dumbbell, Edit3, Factory, Flower2, Folder, FolderTree, Gamepad2, Gem, Globe2, Hammer, HeartPulse, House, Laptop, Leaf, Layers3, Lightbulb, MapPin, Megaphone, Monitor, Package, Palette, PawPrint, Pill, Plane, Plus, Rocket, Search, Shirt, ShoppingBag, Smartphone, Sofa, Tag, Trash2, Wrench, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { api, getSession } from '../services/api.js';
 import { can } from '../utils/permissions.js';
@@ -21,6 +21,7 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
   const [subSubCategoryDialog, setSubSubCategoryDialog] = useState(null);
   const [subSubCategoryNames, setSubSubCategoryNames] = useState(['']);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [collapsedCategories, setCollapsedCategories] = useState(new Set(categories.map((category) => category._id)));
   useEffect(() => {
     setCollapsedCategories((current) => {
@@ -44,12 +45,14 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
   async function saveCategory(event) {
     event.preventDefault();
     if (!categoryName.trim()) { toast.error('Category name is required.'); return; }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       const result = dialog.mode === 'create' ? await api.createCategory(token, { name: categoryName }) : await api.updateCategory(token, dialog.category._id, { name: categoryName });
       setCategories((current) => dialog.mode === 'create' ? [result.category, ...current] : current.map((category) => category._id === result.category._id ? result.category : category));
       setDialog(null); setCategoryName(''); toast.success(dialog.mode === 'create' ? 'Category added successfully.' : 'Category updated successfully.');
-    } catch (error) { toast.error(error.message); } finally { setSaving(false); }
+    } catch (error) { toast.error(error.message); } finally { savingRef.current = false; setSaving(false); }
   }
   async function removeCategory(category) {
     setDeleteDialog({ type: 'category', category });
@@ -58,12 +61,14 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
     event.preventDefault();
     const names = subCategoryNames.map((name) => name.trim()).filter(Boolean);
     if (!names.length) { toast.error('Add at least one sub category.'); return; }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       let updatedCategory = subCategoryDialog;
       for (const name of names) { const result = await api.createSubCategory(token, subCategoryDialog._id, { name }); updatedCategory = result.category; }
       updateCategoryState(updatedCategory); setSubCategoryDialog(null); setSubCategoryNames(['']); toast.success(`${names.length} sub categor${names.length === 1 ? 'y' : 'ies'} added successfully.`);
-    } catch (error) { toast.error(error.message); } finally { setSaving(false); }
+    } catch (error) { toast.error(error.message); } finally { savingRef.current = false; setSaving(false); }
   }
   async function editSubCategory(category, subCategory) {
     const name = window.prompt('Enter sub category name:', subCategory.name);
@@ -77,6 +82,8 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
     event.preventDefault();
     const names = subSubCategoryNames.map((name) => name.trim()).filter(Boolean);
     if (!names.length) { toast.error('Add at least one sub-sub category.'); return; }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       for (const name of names) {
@@ -86,7 +93,7 @@ function CategoryMasterPanel({ categories, setCategories, token }) {
       setSubSubCategoryDialog(null);
       setSubSubCategoryNames(['']);
       toast.success(`${names.length} sub-sub categor${names.length === 1 ? 'y' : 'ies'} added successfully.`);
-    } catch (error) { toast.error(error.message); } finally { setSaving(false); }
+    } catch (error) { toast.error(error.message); } finally { savingRef.current = false; setSaving(false); }
   }
   async function editSubSubCategory(category, subCategory, subSubCategory) {
     const name = window.prompt('Enter sub-sub category name:', subSubCategory.name);

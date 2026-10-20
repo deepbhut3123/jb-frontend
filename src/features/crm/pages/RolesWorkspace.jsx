@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Edit3, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../../services/api.js';
 import { PERMISSION_MODULES } from '../../../utils/permissions.js';
+import LoadingButton from '../../../components/LoadingButton.jsx';
 
 const emptyForm = { name: '', description: '', isActive: true, permissions: [] };
 
@@ -11,6 +12,8 @@ function RolesWorkspace({ token }) {
   const [modules, setModules] = useState(PERMISSION_MODULES);
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const permissionCount = useMemo(() => modules.reduce((total, module) => total + module.actions.length, 0), [modules]);
 
   useEffect(() => {
@@ -38,12 +41,16 @@ function RolesWorkspace({ token }) {
   }
   async function submit(event) {
     event.preventDefault();
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       const result = dialog.mode === 'create' ? await api.createRole(token, form) : await api.updateRole(token, dialog.role._id, form);
       setRoles((current) => dialog.mode === 'create' ? [...current.filter((role) => role.isSystem), result.role, ...current.filter((role) => !role.isSystem)] : current.map((role) => role._id === result.role._id ? result.role : role));
       setDialog(null);
       toast.success(dialog.mode === 'create' ? 'Role created successfully.' : 'Permissions updated successfully. Changes apply on the user’s next request.');
     } catch (error) { toast.error(error.message); }
+    finally { savingRef.current = false; setSaving(false); }
   }
   async function removeRole() {
     try {
@@ -82,7 +89,7 @@ function RolesWorkspace({ token }) {
         <div className="role-form-fields"><label>Name<input required maxLength="60" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Sales Executive" /></label><label><span>Description <span className="optional-label">Optional</span></span><input maxLength="240" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Main responsibility" /></label><label className="role-active-toggle"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} /><span><Check size={14} /></span>Active</label></div>
         <div className="permission-heading"><h3>Permissions</h3><button type="button" onClick={() => setForm((current) => ({ ...current, permissions: current.permissions.length === permissionCount ? [] : modules.flatMap((module) => module.actions.map((action) => `${module.key}.${action}`)) }))}>{form.permissions.length === permissionCount ? 'Clear all' : 'Select all'}</button></div>
         <div className="permission-table-wrap"><table className="permission-table"><thead><tr><th>Module</th><th title="Show in sidebar">Sidebar</th><th title="View own data">Own</th><th title="View all users’ data">All users</th><th>Create</th><th>Edit</th><th>Delete</th><th><span className="loading-sr-only">Row actions</span></th></tr></thead><tbody>{modules.map((module) => <tr key={module.key}><th>{module.label}</th>{['menu', 'view', 'viewAll', 'create', 'edit', 'delete'].map((action) => { const available = module.actions.includes(action); const permission = `${module.key}.${action}`; return <td key={action}>{available ? <label className="permission-check"><input type="checkbox" aria-label={`${module.label}: ${action}`} checked={form.permissions.includes(permission)} onChange={() => toggle(permission)} /><span><Check size={13} /></span></label> : <span className="permission-na">—</span>}</td>; })}<td><button className="module-toggle" type="button" aria-label={`${module.actions.every((action) => form.permissions.includes(`${module.key}.${action}`)) ? 'Clear' : 'Select'} all ${module.label} permissions`} onClick={() => toggleModule(module)}>{module.actions.every((action) => form.permissions.includes(`${module.key}.${action}`)) ? 'Clear' : 'All'}</button></td></tr>)}</tbody></table></div>
-        <div className="modal-footer"><span className="permission-selected">{form.permissions.length} selected</span><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" type="submit">{dialog.mode === 'create' ? 'Create role' : 'Save changes'}</button></div>
+        <div className="modal-footer"><span className="permission-selected">{form.permissions.length} selected</span><button className="secondary-action" disabled={saving} type="button" onClick={() => setDialog(null)}>Cancel</button><LoadingButton loading={saving} loadingText={dialog.mode === 'create' ? 'Creating role…' : 'Saving changes…'}>{dialog.mode === 'create' ? 'Create role' : 'Save changes'}</LoadingButton></div>
       </form>
     </div>}
     {dialog?.mode === 'delete' && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}><div className="confirm-modal"><div className="confirm-icon"><Trash2 size={20} /></div><h2>Delete {dialog.role.name}?</h2><p>This permanently removes the role. It can only be deleted when no users are assigned.</p><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="danger-action" type="button" onClick={removeRole}>Delete role</button></div></div></div>}

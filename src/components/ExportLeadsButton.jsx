@@ -4,6 +4,7 @@ import { CalendarClock, Download, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { api, getSession } from '../services/api.js';
+import LoadingButton from './LoadingButton.jsx';
 
 function csvValue(value) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -24,6 +25,7 @@ function ExportLeadsButton({ section = 'leads' }) {
   const selectedLeadIdsRef = useRef([]);
   const leadCache = useRef([]);
   const pausedRef = useRef(false);
+  const bulkSavingRef = useRef(false);
 
   function updateSelection(updater) {
     setSelectedLeadIds((current) => {
@@ -162,7 +164,8 @@ function ExportLeadsButton({ section = 'leads' }) {
       toast.error('Next follow-up date cannot be before the activity date.');
       return;
     }
-
+    if (bulkSavingRef.current) return;
+    bulkSavingRef.current = true;
     setBulkSaving(true);
     try {
       const { token } = getSession();
@@ -191,6 +194,7 @@ function ExportLeadsButton({ section = 'leads' }) {
     } catch (error) {
       toast.error(error.message || 'Unable to add the bulk follow-up.');
     } finally {
+      bulkSavingRef.current = false;
       setBulkSaving(false);
     }
   }
@@ -259,7 +263,7 @@ function ExportLeadsButton({ section = 'leads' }) {
             </div>
             <div className="modal-footer">
               <button className="secondary-action" type="button" disabled={bulkSaving} onClick={() => setBulkDialogOpen(false)}>Cancel</button>
-              <button className="primary-action" type="submit" disabled={bulkSaving}>{bulkSaving ? 'Saving…' : `Save to ${selectedLeadIds.length} leads`}</button>
+              <LoadingButton loading={bulkSaving} loadingText="Saving follow-ups…">Save to {selectedLeadIds.length} leads</LoadingButton>
             </div>
           </form>
         </div>

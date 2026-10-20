@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, KeyRound, LockKeyhole, Save, UserRound } from 'lucide-react';
 import { toast } from 'react-toastify';
 import LoadingButton from '../../../components/LoadingButton.jsx';
@@ -17,6 +17,8 @@ export default function ProfileWorkspace({ token, user, onProfileUpdated }) {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const profileSavingRef = useRef(false);
+  const passwordSavingRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -29,6 +31,8 @@ export default function ProfileWorkspace({ token, user, onProfileUpdated }) {
 
   async function saveProfile(event) {
     event.preventDefault();
+    if (profileSavingRef.current) return;
+    profileSavingRef.current = true;
     setSavingProfile(true);
     try {
       const response = await api.updateProfile(token, { name: profile.name, phone: profile.phone });
@@ -36,19 +40,21 @@ export default function ProfileWorkspace({ token, user, onProfileUpdated }) {
       onProfileUpdated(response.user);
       toast.success(response.message);
     } catch (error) { toast.error(error.message); }
-    finally { setSavingProfile(false); }
+    finally { profileSavingRef.current = false; setSavingProfile(false); }
   }
 
   async function savePassword(event) {
     event.preventDefault();
     if (passwords.newPassword !== passwords.confirmPassword) { toast.error('New password and retype password must match.'); return; }
+    if (passwordSavingRef.current) return;
+    passwordSavingRef.current = true;
     setSavingPassword(true);
     try {
       const response = await api.changePassword(token, passwords);
       setPasswords(emptyPasswordForm);
       toast.success(response.message);
     } catch (error) { toast.error(error.message); }
-    finally { setSavingPassword(false); }
+    finally { passwordSavingRef.current = false; setSavingPassword(false); }
   }
 
   return <div className="crm-content-inner profile-page">
