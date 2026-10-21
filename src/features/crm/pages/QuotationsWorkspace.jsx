@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AutoComplete, Select } from "antd";
+import { AutoComplete, Dropdown, Select } from "antd";
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
-import { CopyPlus, Download, Edit3, LoaderCircle, Mail, Phone, Plus, Search, Trash2, X } from "lucide-react";
+import { Copy, CopyPlus, Download, Edit3, LoaderCircle, Mail, MoreHorizontal, Phone, Plus, Search, Trash2, X } from "lucide-react";
 import { api, getSession } from "../../../services/api.js";
 import { can, isAdministrator } from "../../../utils/permissions.js";
 import { AntDatePicker, LeadDropdown, PhoneLink } from "../CrmControls.jsx";
@@ -176,18 +176,39 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
     setDialog({ mode: "create" });
   }
 
-  function openEdit(quotation) {
+  function formFromQuotation(quotation, overrides = {}) {
     const lead = leads.find((item) => String(item._id) === String(quotation.leadId));
     const savedPersonId = lead?.companyPersons?.some((person) => String(person._id) === String(quotation.contactPersonId)) ? quotation.contactPersonId : "";
-    setForm({ leadId: quotation.leadId || "", contactPersonId: savedPersonId, contactPersonKey: savedPersonId, contactName: quotation.contactName || "", contactRole: quotation.contactRole || "", company: quotation.company, email: quotation.email, phone: indianMobileDigits(quotation.phone), freightPacking: quotation.freightPacking || 0, generalDiscountPercent: quotation.generalDiscountPercent || 0, generalDiscountAmount: quotation.generalDiscountAmount || 0, generalDiscountMode: "percent", items: quotation.items?.map(savedQuotationItem) || [], quotationDate: quotation.quotationDate?.slice(0, 10) || quotation.createdAt?.slice(0, 10) || dayjs().format("YYYY-MM-DD"), status: quotation.status, revisedFromId: "" });
+    return { leadId: quotation.leadId || "", contactPersonId: savedPersonId, contactPersonKey: savedPersonId, contactName: quotation.contactName || "", contactRole: quotation.contactRole || "", company: quotation.company || "", email: quotation.email || "", phone: indianMobileDigits(quotation.phone), freightPacking: quotation.freightPacking || 0, generalDiscountPercent: quotation.generalDiscountPercent || 0, generalDiscountAmount: quotation.generalDiscountAmount || 0, generalDiscountMode: "percent", items: quotation.items?.length ? quotation.items.map(savedQuotationItem) : [{ ...emptyItem }], quotationDate: quotation.quotationDate?.slice(0, 10) || quotation.createdAt?.slice(0, 10) || dayjs().format("YYYY-MM-DD"), status: quotation.status || "Draft", revisedFromId: "", ...overrides };
+  }
+
+  function openEdit(quotation) {
+    setForm(formFromQuotation(quotation));
     setDialog({ mode: "edit", quotation });
   }
 
+  function openCopy(quotation) {
+    setForm(formFromQuotation(quotation, { quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: "" }));
+    setDialog({ mode: "copy", quotation });
+  }
+
   function openRevision(quotation) {
-    const lead = leads.find((item) => String(item._id) === String(quotation.leadId));
-    const savedPersonId = lead?.companyPersons?.some((person) => String(person._id) === String(quotation.contactPersonId)) ? quotation.contactPersonId : "";
-    setForm({ leadId: quotation.leadId || "", contactPersonId: savedPersonId, contactPersonKey: savedPersonId, contactName: quotation.contactName || "", contactRole: quotation.contactRole || "", company: quotation.company, email: quotation.email, phone: indianMobileDigits(quotation.phone), freightPacking: quotation.freightPacking || 0, generalDiscountPercent: quotation.generalDiscountPercent || 0, generalDiscountAmount: quotation.generalDiscountAmount || 0, generalDiscountMode: "percent", items: quotation.items?.map(savedQuotationItem) || [emptyItem], quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: quotation._id });
+    setForm(formFromQuotation(quotation, { quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: quotation._id }));
     setDialog({ mode: "revise", quotation });
+  }
+
+  function quotationActionItems(quotation) {
+    return [
+      canCreate && { key: "copy", icon: <Copy size={15} />, label: "Duplicate quotation" },
+      canCreate && { key: "revise", icon: <CopyPlus size={15} />, label: "Create revision", disabled: !quotation.leadId },
+      canEdit && { key: "edit", icon: <Edit3 size={15} />, label: "Edit quotation" },
+    ].filter(Boolean);
+  }
+
+  function handleQuotationAction(action, quotation) {
+    if (action === "copy") openCopy(quotation);
+    else if (action === "revise") openRevision(quotation);
+    else if (action === "edit") openEdit(quotation);
   }
 
   useEffect(() => {
@@ -227,7 +248,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
       const payload = { ...form, phone: form.phone ? `+91${form.phone}` : "", generalDiscountPercent: effectiveGeneralDiscountPercent, generalDiscountAmount: generalDiscount, items: form.items.map((item) => ({ productId: item.productId, productName: item.productName, description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, taxRate: item.taxRate, discountPercent: itemEffectiveDiscountPercent(item), discountAmount: itemDiscount(item), discountMode: item.discountMode })) };
       const result = dialog.mode === "edit" ? await api.updateQuotation(token, dialog.quotation._id, payload) : await api.createQuotation(token, payload);
       commitQuotations((current) => dialog.mode === "edit" ? current.map((item) => item._id === result.quotation._id ? result.quotation : item) : [result.quotation, ...current]);
-      const message = dialog.mode === "revise" ? "Revised quotation created." : dialog.mode === "create" ? "Quotation added successfully." : "Quotation updated successfully.";
+      const message = dialog.mode === "revise" ? "Revised quotation created." : dialog.mode === "copy" ? "Quotation duplicated successfully." : dialog.mode === "create" ? "Quotation added successfully." : "Quotation updated successfully.";
       setDialog(null);
       toast.success(message);
     } catch (error) { toast.error(error.message); }
@@ -374,7 +395,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
                 <td className="quotation-amount-cell"><strong>Rs. {quotationConvertedAmount(quotation, productById).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td>{showMargin && <td className="quotation-margin-cell">{quotation.items?.length ? quotation.items.map((item, itemIndex) => { const product = productById.get(String(item.productId)); return <small key={`${item.productId}-${itemIndex}`} title={quotationItemDescription(item)}>{Number(product?.marginPercent || 0).toLocaleString("en-IN")}%</small>; }) : <span>—</span>}</td>}<td className="quotation-amount-cell"><strong>Rs. {Number(quotation.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>{Number(quotation.generalDiscountPercent) > 0 && <small>{quotation.generalDiscountPercent}% general discount</small>}</td>
                 <td><div className="quotation-table-status" onClick={(event) => event.stopPropagation()}><LeadDropdown value={pendingStatuses[quotation._id] || quotation.status} options={quotationStatuses} onChange={(status) => updateStatus(quotation, status)} disabled={!canEdit || Boolean(pendingStatuses[quotation._id])} loading={Boolean(pendingStatuses[quotation._id])} ariaLabel={`Status for ${quotation.company || "quotation"}`} /></div></td>
                 <td>{formatDisplayDate(quotation.quotationDate || quotation.createdAt)}</td><td>{quotation.createdByName || "You"}</td>
-                <td><div className="table-actions" onClick={(event) => event.stopPropagation()}><button className="icon-action download" type="button" title="Download quotation PDF" aria-label={`Download quotation for ${quotation.company || "company"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={16} /></button>{canCreate && <button className="icon-action quotation" type="button" title={quotation.leadId ? "Create revised quotation" : "Link this older quotation to a lead before revising"} disabled={!quotation.leadId} onClick={() => openRevision(quotation)}><CopyPlus size={16} /></button>}{canEdit && <button className="icon-action edit" type="button" title="Edit latest quotation" onClick={() => openEdit(quotation)}><Edit3 size={16} /></button>}{canDelete && <button className="icon-action delete" type="button" title="Delete latest quotation" onClick={() => setDialog({ mode: "delete", quotation })}><Trash2 size={16} /></button>}</div></td>
+                <td><div className="table-actions" onClick={(event) => event.stopPropagation()}><button className="icon-action download" type="button" title="Download quotation PDF" aria-label={`Download quotation for ${quotation.company || "company"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={16} /></button>{canDelete && <button className="icon-action delete" type="button" title="Delete latest quotation" onClick={() => setDialog({ mode: "delete", quotation })}><Trash2 size={16} /></button>}{(canCreate || canEdit) && <Dropdown placement="bottomRight" trigger={["click"]} overlayClassName="quotation-action-dropdown" menu={{ items: quotationActionItems(quotation), onClick: ({ key, domEvent }) => { domEvent.stopPropagation(); handleQuotationAction(key, quotation); } }}><button className="icon-action quotation-menu" type="button" title="Duplicate, revise, or edit quotation" aria-label={`Open actions for ${quotation.company || "quotation"}`} aria-haspopup="menu"><MoreHorizontal size={18} /></button></Dropdown>}</div></td>
               </tr>
             ); }) : <tr><td className="empty-table" colSpan={showMargin ? 10 : 9}>No quotations found for this filter.</td></tr>}
           </tbody>
@@ -400,12 +421,12 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
         </div>
       )}
       {dialog?.mode === "delete" && <div className="modal-backdrop" role="presentation"><div className="confirm-modal"><div className="confirm-icon"><Trash2 size={20} /></div><h2>Delete this quotation?</h2><p>This will permanently remove the quotation for <strong>{dialog.quotation.company || "this company"}</strong>.</p><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="danger-action" type="button" onClick={deleteQuotation}>Delete quotation</button></div></div></div>}
-      {dialog && ["create", "edit", "revise"].includes(dialog.mode) && (
+      {dialog && ["create", "copy", "edit", "revise"].includes(dialog.mode) && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && setDialog(null)}>
           <form className="user-modal quotation-modal" onSubmit={submitQuotation}>
-            <div className="modal-heading"><div><span className="dashboard-kicker">Quotation workspace</span><h2>{dialog.mode === "create" ? "Add a new quotation" : dialog.mode === "revise" ? `Create revision ${(dialog.quotation.revisionNumber || 0) + 1}` : "Edit quotation"}</h2></div><button className="modal-close" disabled={saving} type="button" aria-label="Close" onClick={() => setDialog(null)}><X size={18} /></button></div>
+            <div className="modal-heading"><div><span className="dashboard-kicker">Quotation workspace</span><h2>{dialog.mode === "create" ? "Add a new quotation" : dialog.mode === "copy" ? "Duplicate quotation" : dialog.mode === "revise" ? `Create revision ${(dialog.quotation.revisionNumber || 0) + 1}` : "Edit quotation"}</h2></div><button className="modal-close" disabled={saving} type="button" aria-label="Close" onClick={() => setDialog(null)}><X size={18} /></button></div>
             <div className="modal-fields">
-              <label className="full-field">Company lead<Select className="antd-crm-select quotation-lead-select" showSearch optionFilterProp="label" value={form.leadId || undefined} placeholder="Select a company" disabled={dialog.mode !== "create" && Boolean(form.leadId)} options={leads.map((lead) => ({ value: lead._id, label: (lead.company && lead.company !== "N/A" ? lead.company : "Unnamed company").toLocaleUpperCase("en-IN") }))} popupRender={(menu) => <><div className="quotation-company-menu">{menu}</div><button className="dropdown-management-action quotation-add-company" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => navigate("/leads?create=1")}><Plus size={14} /> Add company</button></>} onChange={(leadId) => setForm((current) => applyLead(leadId, current))} /></label>
+              <label className="full-field">Company lead<Select className="antd-crm-select quotation-lead-select" showSearch optionFilterProp="label" value={form.leadId || undefined} placeholder="Select a company" disabled={!['create', 'copy'].includes(dialog.mode) && Boolean(form.leadId)} options={leads.map((lead) => ({ value: lead._id, label: (lead.company && lead.company !== "N/A" ? lead.company : "Unnamed company").toLocaleUpperCase("en-IN") }))} popupRender={(menu) => <><div className="quotation-company-menu">{menu}</div><button className="dropdown-management-action quotation-add-company" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => navigate("/leads?create=1")}><Plus size={14} /> Add company</button></>} onChange={(leadId) => setForm((current) => applyLead(leadId, current))} /></label>
               <label className="full-field">Person<Select className="antd-crm-select quotation-lead-select" allowClear showSearch optionFilterProp="label" value={form.contactPersonKey || undefined} placeholder={!form.leadId ? "Select a company first" : selectedLeadPeople.length ? "Select a person" : "No people added to this company"} disabled={!form.leadId || !selectedLeadPeople.length} options={selectedLeadPeople.map((person, index) => ({ value: person._id || `legacy-${index}`, label: `${person.name || `Person ${index + 1}`}${person.role ? ` - ${person.role}` : ""}${person.number ? ` - ${person.number}` : ""}` }))} onChange={applyPerson} onClear={() => applyPerson("")} /></label>
               {selectedLead && <div className="full-field quotation-lead-summary"><strong>Company details</strong><div><span><small>Company</small>{selectedLead.company && selectedLead.company !== "N/A" ? selectedLead.company : "Not provided"}</span><span><small>Company type</small>{selectedLead.customerType || "Not provided"}</span><span><small>Address</small>{[selectedLead.address1, selectedLead.address2, selectedLead.area, selectedLead.city, selectedLead.state].filter(Boolean).join(", ") || "Not provided"}</span><span><small>People</small>{selectedLeadPeople.length}</span></div></div>}
               <label>Quotation date<AntDatePicker value={form.quotationDate} onChange={(quotationDate) => setForm({ ...form, quotationDate })} required /></label>
@@ -424,7 +445,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
               <label>Freight / Packing amount<input min="0" step="0.01" type="number" value={form.freightPacking} onChange={(event) => setForm({ ...form, freightPacking: event.target.value })} placeholder="0.00" /></label>
               <label>Status<LeadDropdown value={form.status} options={quotationStatuses} onChange={(status) => setForm({ ...form, status })} /></label>
             </div>
-            <div className="modal-footer"><button className="secondary-action" type="button" disabled={saving} onClick={() => setDialog(null)}>Cancel</button><LoadingButton loading={saving} loadingText={dialog.mode === "edit" ? "Saving changes…" : "Creating quotation…"} disabled={!form.leadId}>{dialog.mode === "create" ? "Create quotation" : dialog.mode === "revise" ? "Create revised quote" : "Save changes"}</LoadingButton></div>
+            <div className="modal-footer"><button className="secondary-action" type="button" disabled={saving} onClick={() => setDialog(null)}>Cancel</button><LoadingButton loading={saving} loadingText={dialog.mode === "edit" ? "Saving changes…" : "Creating quotation…"} disabled={!form.leadId}>{dialog.mode === "create" ? "Create quotation" : dialog.mode === "copy" ? "Create duplicate quotation" : dialog.mode === "revise" ? "Create revised quote" : "Save changes"}</LoadingButton></div>
           </form>
         </div>
       )}

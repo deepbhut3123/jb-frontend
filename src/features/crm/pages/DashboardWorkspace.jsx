@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Select } from 'antd';
+import { AreaChartOutlined, BarChartOutlined, LineChartOutlined, OrderedListOutlined, PieChartOutlined } from '@ant-design/icons';
 import { BadgeCheck, Building2, ChartNoAxesCombined, Clock3, FileText, Flame, Goal, IndianRupee, Package, UsersRound } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../../services/api.js';
@@ -152,10 +153,18 @@ function formatCompactCurrency(value) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', notation: Number(value) >= 100000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(Number(value || 0));
 }
 
+const chartStyleIcons = { bar: BarChartOutlined, columns: BarChartOutlined, line: LineChartOutlined, area: AreaChartOutlined, donut: PieChartOutlined, ranked: OrderedListOutlined };
+
+function ChartStyleButtons({ value, options, onChange, ariaLabel = 'Chart design' }) {
+  return <div className="dashboard-chart-style-buttons" role="group" aria-label={ariaLabel}>
+    {options.map((option) => { const Icon = chartStyleIcons[option.value] || BarChartOutlined; return <button className={value === option.value ? 'active' : ''} type="button" key={option.value} title={option.label} aria-label={option.label} aria-pressed={value === option.value} onClick={() => onChange(option.value)}><Icon style={{ fontSize: 18 }} /></button>; })}
+  </div>;
+}
+
 function ChartControls({ dimension, dimensions, style, styles, onDimension, onStyle }) {
   return <div className="dashboard-chart-controls">
     <Select aria-label="Chart data" className="dashboard-chart-select" value={dimension} options={dimensions} onChange={onDimension} />
-    <Select aria-label="Chart design" className="dashboard-chart-select style-select" value={style} options={styles} onChange={onStyle} />
+    <ChartStyleButtons value={style} options={styles} onChange={onStyle} />
   </div>;
 }
 
@@ -342,7 +351,7 @@ function DashboardOverview({ session }) {
     <div className="dashboard-module-heading"><div><span className="dashboard-module-icon quotations"><FileText size={18} /></span><div><span>Quotation module</span><h2>Quotation performance and value</h2></div></div><small>{quotationMetrics.accepted} accepted · {quotationMetrics.acceptanceRate}% success after decision</small></div>
     <div className="dashboard-chart-grid">
       <section className="analytics-card dashboard-chart-card">
-        <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Outcome</span><h2>Quotation status</h2></div><div className="dashboard-chart-controls"><Select aria-label="Quotation status chart design" className="dashboard-chart-select style-select" value={preferences.quotationStatusStyle || 'donut'} options={[{ value: 'donut', label: 'Donut chart' }, { value: 'bar', label: 'Bar chart' }]} onChange={(value) => updatePreference('quotationStatusStyle', value)} /></div></div>
+        <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Outcome</span><h2>Quotation status</h2></div><div className="dashboard-chart-controls"><ChartStyleButtons ariaLabel="Quotation status chart design" value={preferences.quotationStatusStyle || 'donut'} options={[{ value: 'donut', label: 'Donut chart' }, { value: 'bar', label: 'Bar chart' }]} onChange={(value) => updatePreference('quotationStatusStyle', value)} /></div></div>
         {(preferences.quotationStatusStyle || 'donut') === 'donut' ? <DonutChart data={quotationStatusData} /> : <BarChart data={quotationStatusData} />}
       </section>
       <section className="analytics-card dashboard-chart-card">

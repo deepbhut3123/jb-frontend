@@ -14,6 +14,7 @@ const protectedRoutes = {
   '/products': { section: 'products' },
   '/categories': { section: 'categories' },
   '/quotations': { section: 'quotations' },
+  '/reports': { section: 'reports' },
   '/whatsapp': { section: 'whatsapp' },
   '/settings': { section: 'settings' },
   '/customers': { section: 'customers' },
