@@ -30,6 +30,14 @@ function formatCurrency(value) {
   return `Rs. ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 }
 
+function quotationNumber(quotation) {
+  const year = quotation.quotationYear || new Date(quotation.quotationDate || quotation.createdAt || Date.now()).getFullYear();
+  const serial = quotation.serialNumber || 1;
+  const initial = String(quotation.creatorInitial || quotation.createdByName || "J").trim().charAt(0).toUpperCase();
+  const revision = Number(quotation.revisionNumber || 0) > 0 ? `/R${quotation.revisionNumber}` : "";
+  return `JB/QTN/${year}/${serial}/${initial}${revision}`;
+}
+
 function quotationItemDescription(item) {
   return item.description || item.productName || "Product";
 }
@@ -385,16 +393,16 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
       </div>
       <div className="quotation-table-wrap" ref={tableWrapRef}>
         <table className="quotation-table">
-          <thead><tr><th>Company</th><th>Version</th><th>Person</th><th>Minimum price</th>{showMargin && <th>Margin %</th>}<th>Amount</th><th>Status</th><th>Quotation date</th><th>Created by</th><th className="actions-heading">Actions</th></tr></thead>
+          <thead><tr><th>Quotation</th><th className="quotation-company-column">Company</th><th>Quotation date</th><th>Minimum price</th>{showMargin && <th>Margin %</th>}<th>Amount</th><th className="quotation-status-column">Status</th><th>Contact</th><th>Created by</th><th className="actions-heading">Actions</th></tr></thead>
           <tbody>
             {visibleQuotationGroups.length ? visibleQuotationGroups.map((group) => { const quotation = group.latest; return (
               <tr className="quotation-row" key={group.rootId} data-record-id={group.rootId} onClick={() => setDialog({ mode: "history", group })}>
-                <td><strong>{quotation.company || "No company"}</strong><small>{quotation.contactName || "No person selected"}</small>{quotation.items?.length ? <div className="quotation-table-products">{quotation.items.map((item, itemIndex) => <small key={`${item.productId}-${itemIndex}`} title={quotationItemDescription(item)}>{quotationItemValue(item, productById)} × {item.quantity}</small>)}</div> : <small>No products</small>}</td>
-                <td><div className="quotation-version-cell">{Number(quotation.revisionNumber) > 0 ? <span className="quotation-revision-badge">Revision {quotation.revisionNumber}</span> : <span className="quotation-original-badge">Original</span>}<small>{group.revisions.length} version{group.revisions.length === 1 ? "" : "s"}</small></div></td>
-                <td><div className="quotation-contact"><span className={!quotation.email ? "is-empty" : ""}><Mail size={14} />{quotation.email || "No email"}</span><span className={!quotation.phone ? "is-empty" : ""}><Phone size={14} /><PhoneLink phone={quotation.phone} /></span></div></td>
+                <td><div className="quotation-table-meta"><span className="quotation-table-number">{quotationNumber(quotation)}</span>{Number(quotation.revisionNumber) > 0 ? <span className="quotation-revision-badge">Revised</span> : <span className="quotation-original-badge">Original</span>}</div></td>
+                <td className="quotation-company-column"><strong>{quotation.company || "No company"}</strong><small>{quotation.contactName || "No person selected"}</small>{quotation.items?.length ? <div className="quotation-table-products">{quotation.items.map((item, itemIndex) => <small key={`${item.productId}-${itemIndex}`} title={quotationItemDescription(item)}>{quotationItemValue(item, productById)} × {item.quantity}</small>)}</div> : <small>No products</small>}</td>
+                <td>{formatDisplayDate(quotation.quotationDate || quotation.createdAt)}</td>
                 <td className="quotation-amount-cell"><strong>Rs. {quotationConvertedAmount(quotation, productById).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td>{showMargin && <td className="quotation-margin-cell">{quotation.items?.length ? quotation.items.map((item, itemIndex) => { const product = productById.get(String(item.productId)); return <small key={`${item.productId}-${itemIndex}`} title={quotationItemDescription(item)}>{Number(product?.marginPercent || 0).toLocaleString("en-IN")}%</small>; }) : <span>—</span>}</td>}<td className="quotation-amount-cell"><strong>Rs. {Number(quotation.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>{Number(quotation.generalDiscountPercent) > 0 && <small>{quotation.generalDiscountPercent}% general discount</small>}</td>
-                <td><div className="quotation-table-status" onClick={(event) => event.stopPropagation()}><LeadDropdown value={pendingStatuses[quotation._id] || quotation.status} options={quotationStatuses} onChange={(status) => updateStatus(quotation, status)} disabled={!canEdit || Boolean(pendingStatuses[quotation._id])} loading={Boolean(pendingStatuses[quotation._id])} ariaLabel={`Status for ${quotation.company || "quotation"}`} /></div></td>
-                <td>{formatDisplayDate(quotation.quotationDate || quotation.createdAt)}</td><td>{quotation.createdByName || "You"}</td>
+                <td className="quotation-status-column"><div className="quotation-table-status" onClick={(event) => event.stopPropagation()}><LeadDropdown value={pendingStatuses[quotation._id] || quotation.status} options={quotationStatuses} onChange={(status) => updateStatus(quotation, status)} disabled={!canEdit || Boolean(pendingStatuses[quotation._id])} loading={Boolean(pendingStatuses[quotation._id])} ariaLabel={`Status for ${quotation.company || "quotation"}`} /></div></td>
+                <td><div className="quotation-contact"><span className={!quotation.email ? "is-empty" : ""}><Mail size={14} />{quotation.email || "No email"}</span><span className={!quotation.phone ? "is-empty" : ""}><Phone size={14} /><PhoneLink phone={quotation.phone} /></span></div></td><td>{quotation.createdByName || "You"}</td>
                 <td><div className="table-actions" onClick={(event) => event.stopPropagation()}><button className="icon-action download" type="button" title="Download quotation PDF" aria-label={`Download quotation for ${quotation.company || "company"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={16} /></button>{canDelete && <button className="icon-action delete" type="button" title="Delete latest quotation" onClick={() => setDialog({ mode: "delete", quotation })}><Trash2 size={16} /></button>}{(canCreate || canEdit) && <Dropdown placement="bottomRight" trigger={["click"]} overlayClassName="quotation-action-dropdown" menu={{ items: quotationActionItems(quotation), onClick: ({ key, domEvent }) => { domEvent.stopPropagation(); handleQuotationAction(key, quotation); } }}><button className="icon-action quotation-menu" type="button" title="Duplicate, revise, or edit quotation" aria-label={`Open actions for ${quotation.company || "quotation"}`} aria-haspopup="menu"><MoreHorizontal size={18} /></button></Dropdown>}</div></td>
               </tr>
             ); }) : <tr><td className="empty-table" colSpan={showMargin ? 10 : 9}>No quotations found for this filter.</td></tr>}
