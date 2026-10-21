@@ -17,9 +17,10 @@ import PricingSettingsWorkspace from './pages/PricingSettingsWorkspace.jsx';
 import CustomersWorkspace from './pages/CustomersWorkspace.jsx';
 import ProfileWorkspace from './pages/ProfileWorkspace.jsx';
 import RolesWorkspace from './pages/RolesWorkspace.jsx';
+import ReportsWorkspace from './pages/ReportsWorkspace.jsx';
 import { canView, isAdministrator } from '../../utils/permissions.js';
 
-const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', categories: '/categories', products: '/products', users: '/users', roles: '/roles', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers', profile: '/profile' };
+const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', reports: '/reports', categories: '/categories', products: '/products', users: '/users', roles: '/roles', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers', profile: '/profile' };
 
 function CrmWorkspace({ section = 'dashboard' }) {
   const session = getSession();
@@ -143,6 +144,7 @@ function CrmWorkspace({ section = 'dashboard' }) {
           : section === 'settings' ? <PricingSettingsWorkspace token={session.token} />
           : section === 'whatsapp' ? <WhatsAppWorkspace token={session.token} />
           : section === 'roles' ? <RolesWorkspace token={session.token} />
+          : section === 'reports' ? <ReportsWorkspace token={session.token} />
           : section === 'users' ? <UsersPanel users={users} setUsers={setUsers} token={session.token} />
           : section === 'leads' ? <LeadsPanel leads={leads} setLeads={setLeads} isAdmin={isAdmin} users={users} token={session.token} currentUser={session.user} leadOptions={leadOptions} setLeadOptions={setLeadOptions} />
             : section === 'products' ? <ProductMasterPanel products={products} setProducts={setProducts} categories={categories} token={session.token} />
