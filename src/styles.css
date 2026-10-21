@@ -558,9 +558,12 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-table th { padding: 14px 18px; background: #f7f7fb; color: #85849a; font-size: .68rem; letter-spacing: .09em; text-transform: uppercase; }
 .quotation-table td { padding: 15px 18px; border-top: 1px solid #eeeeF4; color: #68677c; font-size: .8rem; }
 .quotation-table td:first-child, .quotation-table td:nth-child(2) { display: table-cell; vertical-align: middle; }
-.quotation-table td:first-child strong, .quotation-table td:first-child small { display: block; }
-.quotation-table td:first-child strong { margin-bottom: 3px; }
-.quotation-table-products { display: flex; max-width: 240px; flex-wrap: wrap; gap: 3px 8px; margin-top: 3px; }
+.quotation-table td:nth-child(2) strong, .quotation-table td:nth-child(2) small { display: block; }
+.quotation-table-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
+.quotation-table-number { display: inline-flex; padding: 4px 7px; border-radius: 6px; color: #392c98; background: #efedfb; font-size: .65rem; font-weight: 750; letter-spacing: .02em; white-space: nowrap; }
+.quotation-table td:nth-child(2) strong { margin-bottom: 3px; }
+.quotation-company-column { width: 278px; min-width: 248px; }
+.quotation-table-products { display: flex; max-width: 278px; flex-wrap: wrap; gap: 3px 8px; margin-top: 3px; }
 .quotation-table-products small { max-width: 100%; overflow: hidden; color: #77768b !important; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
 .quotation-table td strong { color: #29264f; font-weight: 600; }
 .quotation-table td small { color: #9695a6; font-size: .7rem; }
@@ -576,7 +579,9 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-table tbody .quotation-row { cursor: pointer; }
 .quotation-table tbody .quotation-row:hover { background: #f8f6ff; }
 .quotation-status { display: inline-flex; padding: 5px 9px; border-radius: 999px; font-size: .68rem; font-weight: 600; }
-.quotation-table-status { min-width: 160px; }
+.quotation-status-column { width: 160px; min-width: 160px; }
+.quotation-table-status { min-width: 128px; }
+.quotation-table-status .antd-selected-status { flex: 0 0 auto; white-space: nowrap; }
 .quotation-status-draft { background: #eeeef8; color: #5e5794; }
 .quotation-status-sent { background: #fff3df; color: #a9670b; }
 .quotation-status-accepted { background: #e7f5ed; color: #197044; }
@@ -584,8 +589,6 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-revision-badge, .quotation-original-badge { display: inline-flex; padding: 5px 8px; border-radius: 999px; font-size: .68rem; font-weight: 700; white-space: nowrap; }
 .quotation-revision-badge { background: #fff3df; color: #a9670b; }
 .quotation-original-badge { background: #eeeef8; color: #5e5794; }
-.quotation-version-cell { display: grid; justify-items: start; gap: 5px; }
-.quotation-version-cell small { white-space: nowrap; }
 .icon-action.quotation-menu { border-color: #d9d6ef; background: #f3f1fd; color: #392c98; }
 .icon-action.quotation-menu:hover, .icon-action.quotation-menu[aria-expanded="true"] { border-color: #392c98; background: #ebe8fb; }
 .quotation-action-dropdown .ant-dropdown-menu { min-width: 205px; padding: 6px; border: 1px solid #e3e1ed; border-radius: 10px; box-shadow: 0 12px 30px rgba(30,27,75,.14); }
@@ -884,7 +887,7 @@ h1 em { color: #d36517; font-style: normal; }
 .lead-name-button > .lead-company-summary { display: grid; gap: 4px; }
 .lead-company-summary strong { color: #29264f; font-size: .86rem; line-height: 1.25; }
 .lead-company-summary small { color: #9695a6; font-size: .7rem; font-weight: 500; line-height: 1.25; }
-.lead-company-summary strong, .lead-company-summary small, .quotation-table td:first-child > strong, .quotation-table td:first-child > small:first-of-type { text-transform: uppercase; }
+.lead-company-summary strong, .lead-company-summary small, .quotation-table td:nth-child(2) > strong, .quotation-table td:nth-child(2) > small:first-of-type { text-transform: uppercase; }
 .lead-name-input, .quotation-name-input { text-transform: uppercase; }
 .lead-name-button:hover strong { color: #392c98; text-decoration: underline; text-underline-offset: 3px; }
 .lead-details-modal { width: min(580px, 100%); padding: 28px; border: 1px solid rgba(255,255,255,.7); border-radius: 18px; background: #fff; box-shadow: 0 24px 60px rgba(30,27,75,.24); animation: modal-rise .24s cubic-bezier(.2,.8,.2,1); }
