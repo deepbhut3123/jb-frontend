@@ -49,7 +49,22 @@ function CrmWorkspace({ section = 'dashboard' }) {
     return () => window.removeEventListener('resize', updateSidebarForViewport);
   }, []);
 
-  useEffect(() => () => window.clearTimeout(sidebarCollapseTimerRef.current), []);
+  useEffect(() => {
+    function collapseWhenInactive() {
+      window.clearTimeout(sidebarCollapseTimerRef.current);
+      setSidebarCollapsed(true);
+    }
+    function handleVisibilityChange() {
+      if (document.hidden) collapseWhenInactive();
+    }
+    window.addEventListener('blur', collapseWhenInactive);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearTimeout(sidebarCollapseTimerRef.current);
+      window.removeEventListener('blur', collapseWhenInactive);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     api.session(session.token).then(({ user }) => {

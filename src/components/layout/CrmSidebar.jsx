@@ -32,8 +32,13 @@ function CrmSidebar({
   onExpand,
   onCollapse,
 }) {
+  function handleFocus(event) {
+    const previousElement = event.relatedTarget;
+    if (previousElement && !event.currentTarget.contains(previousElement)) onExpand();
+  }
+
   return (
-    <aside className="crm-sidebar" onMouseEnter={onExpand} onMouseLeave={onCollapse} onFocus={onExpand} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) onCollapse(); }}>
+    <aside className="crm-sidebar" onMouseMove={onExpand} onMouseLeave={onCollapse} onFocus={handleFocus} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) onCollapse(); }}>
       <div className="crm-brand">
         <img className="crm-brand-full" src={logo} alt="JB Corporation" />
         <img className="crm-brand-icon" src={icon} alt="" aria-hidden="true" />

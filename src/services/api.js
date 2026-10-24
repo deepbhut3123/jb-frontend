@@ -93,6 +93,7 @@ export const api = {
   },
   createQuotation: (token, body) => request('/api/quotations', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateQuotation: (token, id, body) => request(`/api/quotations/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
+  updateQuotationNotes: (token, id, notes) => request(`/api/quotations/${id}/notes`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ notes }) }),
   updateQuotationStatus: (token, id, status) => request(`/api/quotations/${id}/status`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }),
   deleteQuotation: (token, id) => request(`/api/quotations/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }),
   createProduct: (token, body) => request('/api/products', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: body instanceof FormData ? body : JSON.stringify(body) }),
