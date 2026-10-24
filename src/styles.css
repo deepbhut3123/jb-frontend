@@ -563,8 +563,8 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-table-number { display: inline-flex; padding: 4px 7px; border-radius: 6px; color: #392c98; background: #efedfb; font-size: .65rem; font-weight: 750; letter-spacing: .02em; white-space: nowrap; }
 .quotation-table td:nth-child(2) strong { margin-bottom: 3px; }
 .quotation-company-column { width: 278px; min-width: 248px; }
-.quotation-table-products { display: flex; max-width: 278px; flex-wrap: wrap; gap: 3px 8px; margin-top: 3px; }
-.quotation-table-products small { max-width: 100%; overflow: hidden; color: #77768b !important; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+.quotation-table-products { display: block; max-width: 278px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+.quotation-table-products small { display: block; overflow: hidden; color: #77768b !important; text-overflow: ellipsis; white-space: nowrap; }
 .quotation-table td strong { color: #29264f; font-weight: 600; }
 .quotation-table td small { color: #9695a6; font-size: .7rem; }
 .quotation-contact { display: grid; gap: 8px; min-width: 190px; }
@@ -674,6 +674,9 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-history-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
 .quotation-history-summary > span { display: grid; gap: 4px; padding: 10px; border-radius: 8px; background: #fff; color: #85849a; font-size: .68rem; }
 .quotation-history-summary strong { color: #29264f; font-size: .78rem; }
+.quotation-history-notes { margin-top: 12px; padding: 10px 12px; border-left: 3px solid #8e87c8; border-radius: 0 8px 8px 0; background: #f3f1fb; }
+.quotation-history-notes strong { display: block; color: #4d4b66; font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; }
+.quotation-history-notes p { margin: 5px 0 0; color: #5f5d72; font-size: .73rem; line-height: 1.45; white-space: pre-wrap; }
 .quotation-history-products { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .quotation-history-products span { padding: 5px 8px; border-radius: 6px; background: #eeedf5; color: #5f5d72; font-size: .68rem; }
 .quotation-change-list { display: grid; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #e6e5ee; }
@@ -712,8 +715,19 @@ h1 em { color: #d36517; font-style: normal; }
 .quotation-item-row input:focus, .quotation-item-row textarea:focus { border-color: #392c98; box-shadow: 0 0 0 3px rgba(57,44,152,.1); }
 .quotation-item-row input:disabled { background: #f5f5f8; color: #77768b; cursor: not-allowed; }
 .quotation-item-row span { color: #29264f; font-size: .78rem; font-weight: 600; text-align: right; }
-.quotation-margin-cell { min-width: 82px; }
-.quotation-margin-cell small { display: block; color: #392c98; font-weight: 700; line-height: 1.5; }
+.quotation-margin-cell { width: 82px; min-width: 82px; max-width: 82px; }
+.quotation-margin-cell small { display: block; overflow: hidden; color: #392c98; font-weight: 700; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+.icon-action.quotation-notes { border-color: #ddd2a9; background: #fff9e8; color: #8a6500; }
+.icon-action.quotation-notes:hover { border-color: #8a6500; background: #fff2c7; }
+.quotation-notes-modal { width: min(480px, 100%); }
+.quotation-notes-modal > textarea { box-sizing: border-box; width: 100%; min-height: 150px; margin: 18px 0; padding: 13px; border: 1px solid #e5e1d2; border-radius: 9px; outline: 0; background: #fffdf6; color: #4d4b66; font: inherit; font-size: .82rem; line-height: 1.55; resize: vertical; }
+.quotation-notes-modal > textarea:focus { border-color: #8e87c8; box-shadow: 0 0 0 3px rgba(142, 135, 200, .14); }
+.quotation-notes-modal > textarea:read-only { cursor: default; }
+.quotation-list-tooltip .ant-tooltip-inner { min-width: 180px; max-width: 330px; padding: 10px 12px; border-radius: 8px; background: #29264f; box-shadow: 0 8px 22px rgba(30, 27, 75, .22); }
+.quotation-list-tooltip .ant-tooltip-inner > div { display: grid; gap: 0; }
+.quotation-list-tooltip .ant-tooltip-inner strong { display: block; margin: 0 0 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, .22); color: #fff; font-size: .7rem; letter-spacing: .03em; line-height: 1.2; text-transform: uppercase; }
+.quotation-list-tooltip .ant-tooltip-inner span { display: block; padding: 4px 0; color: #e9e8f5; font-size: .73rem; line-height: 1.4; }
+.quotation-list-tooltip .ant-tooltip-inner span + span { border-top: 1px solid rgba(255, 255, 255, .12); }
 .quotation-phone-input { display: flex; min-height: 44px; overflow: hidden; border: 1px solid #dedee8; border-radius: 9px; background: #fff; }
 .quotation-phone-input:focus-within { border-color: #392c98; box-shadow: 0 0 0 3px rgba(57,44,152,.1); }
 .quotation-phone-input > span { display: grid; place-items: center; padding: 0 11px; border-right: 1px solid #dedee8; background: #f7f7fb; color: #4d4b66; font-size: .82rem; font-weight: 700; }

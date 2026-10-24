@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import QRCode from "qrcode";
-import { API_URL } from "../services/api.js";
+import { API_URL, getSession } from "../services/api.js";
 import logoUrl from "../assets/jb-corporation-icon.png";
 import tlxLogoUrl from "../assets/tlx-logo.png";
 import locationIconUrl from "../assets/contact-location.svg";
@@ -31,6 +31,18 @@ const LIGHT_ORANGE = [255, 231, 214];
 
 function money(value) {
   return Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function wholeRupees(value) {
+  return Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+}
+
+function footerPhone(value) {
+  const phone = String(value || "").trim();
+  if (!phone) return COMPANY.phone;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("91") && digits.length >= 12) return phone.startsWith("+") ? phone : `+${phone}`;
+  return `+91 ${phone}`;
 }
 
 function dateText(value) {
@@ -191,13 +203,17 @@ async function svgPngData(url, width = 480, height = 160, tint = "") {
   }
 }
 
-function addPageFooter(doc, contactIcons) {
+function addPageFooter(doc, contactIcons, quotation) {
+  const currentUser = getSession()?.user;
+  const isCreator = String(quotation.createdBy || "") === String(currentUser?.id || "");
+  const creatorPhone = footerPhone(quotation.createdByPhone || (isCreator ? currentUser?.phone : ""));
+  const creatorEmail = quotation.createdByEmail || (isCreator ? currentUser?.email : "") || COMPANY.email;
   const pages = doc.getNumberOfPages();
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page);
     doc.setFillColor(...BLUE);
     doc.roundedRect(10, 284.5, 190, 9.5, 1.2, 1.2, "F");
-    const footerContacts = [[contactIcons.location, COMPANY.address], [contactIcons.phone, COMPANY.phone], [contactIcons.email, COMPANY.email], [contactIcons.web, COMPANY.website]];
+    const footerContacts = [[contactIcons.location, COMPANY.address], [contactIcons.phone, creatorPhone], [contactIcons.email, creatorEmail], [contactIcons.web, COMPANY.website]];
     const footerX = [13, 94, 128, 165];
     footerContacts.forEach(([icon, value], index) => {
       if (icon) doc.addImage(icon, "PNG", footerX[index] - 2, 287.1, 3.8, 3.8, undefined, "FAST");
@@ -253,9 +269,20 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   doc.line(10, 29, 200, 29);
 
   const address = [lead?.address1, lead?.address2, [lead?.area, lead?.city, lead?.state].filter(Boolean).join(", ")].filter(Boolean);
-  card(doc, 6, 32, 106, 59);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  const companyLines = doc.splitTextToSize(`M/s. ${quotation.company || ""}`, 97);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.2);
+  const addressLines = address.flatMap((line) => doc.splitTextToSize(String(line), 97));
+  const addressStartY = 51 + (companyLines.length - 1) * 5.3;
+  const contactStartY = addressStartY + addressLines.length * 4.4 + 4.8;
+  const panelHeight = Math.max(59, contactStartY + 17 - 32);
+  const detailsBottomY = 32 + panelHeight;
+
+  card(doc, 6, 32, 106, panelHeight);
   card(doc, 116, 43, 84, 16);
-  card(doc, 116, 60, 84, 31);
+  card(doc, 116, 60, 84, panelHeight - 28);
   doc.setFillColor(...BLUE);
   doc.roundedRect(116, 32, 84, 9, 1.4, 1.4, "F");
   doc.setFillColor(...ORANGE);
@@ -269,21 +296,20 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   doc.setFont("helvetica", "bold");
   doc.text("To,", 10, 39);
   doc.setFontSize(11.5);
-  doc.text(`M/s. ${quotation.company || ""}`, 10, 45, { maxWidth: 97 });
+  doc.text(companyLines, 10, 45, { lineHeightFactor: 1.1 });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.2);
-  let companyY = 51;
-  address.slice(0, 3).forEach((line) => { doc.text(String(line), 10, companyY, { maxWidth: 97 }); companyY += 4.4; });
-  field(doc, "Contact Person", [quotation.contactName, quotation.contactRole].filter(Boolean).join(" - "), 10, 69, 47, 60, 8);
-  field(doc, "Contact No.", quotation.phone, 10, 75, 47, 60, 8);
-  field(doc, "Email", quotation.email, 10, 81, 47, 60, 8);
+  addressLines.forEach((line, index) => doc.text(line, 10, addressStartY + index * 4.4));
+  field(doc, "Contact Person", quotation.contactName || "-", 10, contactStartY, 47, 60, 8);
+  field(doc, "Contact No.", quotation.phone, 10, contactStartY + 6, 47, 60, 8);
+  field(doc, "Email", quotation.email, 10, contactStartY + 12, 47, 60, 8);
 
   const validUntil = new Date(quotation.quotationDate || quotation.createdAt || Date.now());
   validUntil.setDate(validUntil.getDate() + 15);
   field(doc, "Quotation No.", quotationNumber(quotation), 120, 47.8, 152, 43, 8);
   field(doc, "Date", dateText(quotation.quotationDate || quotation.createdAt), 120, 52.4, 152, 43, 8);
   field(doc, "Valid Until", dateText(validUntil), 120, 57, 152, 43, 8);
-  field(doc, "Kind Attn.", [quotation.contactName, quotation.contactRole].filter(Boolean).join(" - "), 120, 66, 152, 43, 8);
+  field(doc, "Kind Attn.", quotation.contactName || "-", 120, 66, 152, 43, 8);
   field(doc, "Subject", "Quotation for Linear Motion Products", 120, 71, 152, 43, 8);
   doc.setTextColor(...TEXT);
   doc.setFont("helvetica", "normal");
@@ -317,9 +343,9 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
     const effectiveRate = quantity > 0 ? lineAmount / quantity : Number(item.unitPrice || 0);
     return [
       index + 1,
-      description,
-      product.brand || "-",
       item.productCode || product.partCode || product.code || "-",
+      product.brand || "-",
+      description,
       money(quantity).replace(/\.00$/, ""),
       item.unit || product.unit || "Nos.",
       money(effectiveRate),
@@ -327,22 +353,22 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
     ];
   });
   autoTable(doc, {
-    startY: 94,
-    head: [["Sr.", "Product Description", "Brand", "Model / Code", "Qty.", "Unit", "Rate (Rs.)", "Amount (Rs.)"]],
+    startY: detailsBottomY + 3,
+    head: [["SR", "Model code", "Brand", "Description", "Qty", "Unit", "Rate", "Amount"]],
     body: rows,
     margin: { left: 10, right: 10, bottom: 14 },
     theme: "grid",
     styles: { font: "helvetica", fontSize: 7, textColor: TEXT, lineColor: [204, 216, 227], lineWidth: 0.2, cellPadding: 1.5, valign: "middle" },
     headStyles: { fillColor: BLUE, textColor: [255, 255, 255], fontStyle: "bold", halign: "center" },
-    columnStyles: { 0: { cellWidth: 9, halign: "center" }, 1: { cellWidth: 52 }, 2: { cellWidth: 20 }, 3: { cellWidth: 25 }, 4: { cellWidth: 11, halign: "center" }, 5: { cellWidth: 14, halign: "center" }, 6: { cellWidth: 27, halign: "right" }, 7: { cellWidth: 32, halign: "right" } },
+    columnStyles: { 0: { cellWidth: 9, halign: "center" }, 1: { cellWidth: 25 }, 2: { cellWidth: 20 }, 3: { cellWidth: 52 }, 4: { cellWidth: 11, halign: "center" }, 5: { cellWidth: 14, halign: "center" }, 6: { cellWidth: 27, halign: "right" }, 7: { cellWidth: 32, halign: "right" } },
     didParseCell(data) {
-      if (data.section === "body" && data.column.index === 1 && productImages[data.row.index]) {
+      if (data.section === "body" && data.column.index === 3 && productImages[data.row.index]) {
         data.cell.styles.cellPadding = { top: 1.5, right: 1.5, bottom: 1.5, left: 13 };
         data.cell.styles.minCellHeight = 12;
       }
     },
     didDrawCell(data) {
-      const image = data.section === "body" && data.column.index === 1 ? productImages[data.row.index] : null;
+      const image = data.section === "body" && data.column.index === 3 ? productImages[data.row.index] : null;
       if (!image) return;
       const maxWidth = 8.5;
       const maxHeight = 8.5;
@@ -391,7 +417,7 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
       ["Discount", "Rs.", `- ${money(generalDiscountAmount)}`],
       ["Taxable Amount", "Rs.", money(taxableAmount)],
       ["GST", "Rs.", money(taxAmount)],
-      ["Grand Total", "Rs.", money(grandTotal)],
+      ["Grand Total", "Rs.", wholeRupees(grandTotal)],
     ],
     margin: { left: 122 },
     tableWidth: 78,
@@ -462,7 +488,7 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   doc.setFontSize(7.1);
   doc.text(["Thank you for your business.", "We look forward to a long and mutually beneficial association."], 122, signatureY + 8, { maxWidth: 78, lineHeightFactor: 1.25 });
 
-  addPageFooter(doc, { location: locationIcon, phone: phoneIcon, email: emailIcon, web: webIcon });
+  addPageFooter(doc, { location: locationIcon, phone: phoneIcon, email: emailIcon, web: webIcon }, quotation);
   const safeName = String(quotation.company || "company").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "");
   doc.save(`${quotationNumber(quotation).replaceAll("/", "-")}-${safeName || "company"}.pdf`);
 }

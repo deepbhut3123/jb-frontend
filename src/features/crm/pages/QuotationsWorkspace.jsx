@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AutoComplete, Dropdown, Select } from "antd";
+import { AutoComplete, Dropdown, Select, Tooltip } from "antd";
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
-import { Copy, CopyPlus, Download, Edit3, LoaderCircle, Mail, MoreHorizontal, Phone, Plus, Search, Trash2, X } from "lucide-react";
+import { Copy, CopyPlus, Download, Edit3, LoaderCircle, Mail, MoreHorizontal, Phone, Plus, Search, StickyNote, Trash2, X } from "lucide-react";
 import { api, getSession } from "../../../services/api.js";
 import { can, isAdministrator } from "../../../utils/permissions.js";
 import { AntDatePicker, LeadDropdown, PhoneLink } from "../CrmControls.jsx";
@@ -13,7 +13,7 @@ import LoadingButton from '../../../components/LoadingButton.jsx';
 
 const quotationStatuses = ["Draft", "Sent", "Accepted", "Rejected"];
 const emptyItem = { productId: "", productName: "", description: "", quantity: 1, unitPrice: "", taxRate: 18, discountPercent: 0, discountAmount: 0, discountMode: "percent" };
-const emptyForm = { leadId: "", contactPersonId: "", contactPersonKey: "", contactName: "", contactRole: "", company: "", email: "", phone: "", freightPacking: 0, generalDiscountPercent: 0, generalDiscountAmount: 0, generalDiscountMode: "percent", items: [emptyItem], quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: "" };
+const emptyForm = { leadId: "", contactPersonId: "", contactPersonKey: "", contactName: "", contactRole: "", company: "", email: "", phone: "", notes: "", freightPacking: 0, generalDiscountPercent: 0, generalDiscountAmount: 0, generalDiscountMode: "percent", items: [emptyItem], quotationDate: dayjs().format("YYYY-MM-DD"), status: "Draft", revisedFromId: "" };
 
 function indianMobileDigits(value) {
   let digits = String(value || "").replace(/\D/g, "");
@@ -57,6 +57,18 @@ function quotationItemRate(item) {
   const quantity = Number(item.quantity || 0);
   const amount = Number(item.lineTotal ?? item.lineSubtotal ?? (quantity * Number(item.unitPrice || 0)));
   return quantity > 0 ? amount / quantity : Number(item.unitPrice || 0);
+}
+
+function quotationProductsText(quotation, productById) {
+  return (quotation.items || []).map((item) => `${quotationItemValue(item, productById)} × ${item.quantity}`).join(" · ");
+}
+
+function quotationMarginsText(quotation, productById) {
+  return (quotation.items || []).map((item) => `${Number(productById.get(String(item.productId))?.marginPercent || 0).toLocaleString("en-IN")}%`).join(" · ");
+}
+
+function QuotationListTooltip({ heading, rows }) {
+  return <div style={{ display: "grid", gap: 0 }}><strong style={{ display: "block", margin: "0 0 7px", paddingBottom: "7px", borderBottom: "1px solid rgba(255, 255, 255, .22)", color: "#fff", fontSize: ".7rem", letterSpacing: ".03em", lineHeight: 1.2, textTransform: "uppercase" }}>{heading}</strong>{rows.map((row, index) => <span key={`${row}-${index}`} style={{ display: "block", padding: "5px 0", borderTop: index ? "1px solid rgba(255, 255, 255, .12)" : "none", color: "#e9e8f5", fontSize: ".73rem", lineHeight: 1.4 }}>{row}</span>)}</div>;
 }
 
 function revisionChanges(current, previous) {
@@ -187,7 +199,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
   function formFromQuotation(quotation, overrides = {}) {
     const lead = leads.find((item) => String(item._id) === String(quotation.leadId));
     const savedPersonId = lead?.companyPersons?.some((person) => String(person._id) === String(quotation.contactPersonId)) ? quotation.contactPersonId : "";
-    return { leadId: quotation.leadId || "", contactPersonId: savedPersonId, contactPersonKey: savedPersonId, contactName: quotation.contactName || "", contactRole: quotation.contactRole || "", company: quotation.company || "", email: quotation.email || "", phone: indianMobileDigits(quotation.phone), freightPacking: quotation.freightPacking || 0, generalDiscountPercent: quotation.generalDiscountPercent || 0, generalDiscountAmount: quotation.generalDiscountAmount || 0, generalDiscountMode: "percent", items: quotation.items?.length ? quotation.items.map(savedQuotationItem) : [{ ...emptyItem }], quotationDate: quotation.quotationDate?.slice(0, 10) || quotation.createdAt?.slice(0, 10) || dayjs().format("YYYY-MM-DD"), status: quotation.status || "Draft", revisedFromId: "", ...overrides };
+    return { leadId: quotation.leadId || "", contactPersonId: savedPersonId, contactPersonKey: savedPersonId, contactName: quotation.contactName || "", contactRole: quotation.contactRole || "", company: quotation.company || "", email: quotation.email || "", phone: indianMobileDigits(quotation.phone), notes: quotation.notes || "", freightPacking: quotation.freightPacking || 0, generalDiscountPercent: quotation.generalDiscountPercent || 0, generalDiscountAmount: quotation.generalDiscountAmount || 0, generalDiscountMode: "percent", items: quotation.items?.length ? quotation.items.map(savedQuotationItem) : [{ ...emptyItem }], quotationDate: quotation.quotationDate?.slice(0, 10) || quotation.createdAt?.slice(0, 10) || dayjs().format("YYYY-MM-DD"), status: quotation.status || "Draft", revisedFromId: "", ...overrides };
   }
 
   function openEdit(quotation) {
@@ -270,6 +282,18 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
       setDialog(null);
       toast.success("Quotation deleted successfully.");
     } catch (error) { toast.error(error.message); }
+  }
+
+  async function saveQuotationNotes() {
+    if (saving || !dialog?.quotation) return;
+    setSaving(true);
+    try {
+      const result = await api.updateQuotationNotes(token, dialog.quotation._id, dialog.notes);
+      commitQuotations((current) => current.map((item) => item._id === result.quotation._id ? result.quotation : item));
+      setDialog(null);
+      toast.success("Internal notes saved.");
+    } catch (error) { toast.error(error.message); }
+    finally { setSaving(false); }
   }
 
   async function downloadPdf(quotation) {
@@ -393,19 +417,19 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
       </div>
       <div className="quotation-table-wrap" ref={tableWrapRef}>
         <table className="quotation-table">
-          <thead><tr><th>Quotation</th><th className="quotation-company-column">Company</th><th>Quotation date</th><th>Minimum price</th>{showMargin && <th>Margin %</th>}<th>Amount</th><th className="quotation-status-column">Status</th><th>Contact</th><th>Created by</th><th className="actions-heading">Actions</th></tr></thead>
+          <thead><tr><th>Quotation</th><th className="quotation-company-column">Company</th><th>Quotation date</th>{showMargin && <><th>Minimum price</th><th>Margin %</th></>}<th>Amount</th><th className="quotation-status-column">Status</th><th>Contact</th><th>Created by</th><th className="actions-heading">Actions</th></tr></thead>
           <tbody>
             {visibleQuotationGroups.length ? visibleQuotationGroups.map((group) => { const quotation = group.latest; return (
               <tr className="quotation-row" key={group.rootId} data-record-id={group.rootId} onClick={() => setDialog({ mode: "history", group })}>
                 <td><div className="quotation-table-meta"><span className="quotation-table-number">{quotationNumber(quotation)}</span>{Number(quotation.revisionNumber) > 0 ? <span className="quotation-revision-badge">Revised</span> : <span className="quotation-original-badge">Original</span>}</div></td>
-                <td className="quotation-company-column"><strong>{quotation.company || "No company"}</strong><small>{quotation.contactName || "No person selected"}</small>{quotation.items?.length ? <div className="quotation-table-products">{quotation.items.map((item, itemIndex) => <small key={`${item.productId}-${itemIndex}`} title={quotationItemDescription(item)}>{quotationItemValue(item, productById)} × {item.quantity}</small>)}</div> : <small>No products</small>}</td>
+                <td className="quotation-company-column"><strong>{quotation.company || "No company"}</strong><small>{quotation.contactName || "No person selected"}</small>{quotation.items?.length ? <Tooltip placement="topLeft" overlayClassName="quotation-list-tooltip" title={<QuotationListTooltip heading="Products" rows={quotation.items.map((item) => `${quotationItemValue(item, productById)} × ${item.quantity}`)} />}><div className="quotation-table-products"><small>{quotationProductsText(quotation, productById)}</small></div></Tooltip> : <small>No products</small>}</td>
                 <td>{formatDisplayDate(quotation.quotationDate || quotation.createdAt)}</td>
-                <td className="quotation-amount-cell"><strong>Rs. {quotationConvertedAmount(quotation, productById).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></td>{showMargin && <td className="quotation-margin-cell">{quotation.items?.length ? quotation.items.map((item, itemIndex) => { const product = productById.get(String(item.productId)); return <small key={`${item.productId}-${itemIndex}`} title={quotationItemDescription(item)}>{Number(product?.marginPercent || 0).toLocaleString("en-IN")}%</small>; }) : <span>—</span>}</td>}<td className="quotation-amount-cell"><strong>Rs. {Number(quotation.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>{Number(quotation.generalDiscountPercent) > 0 && <small>{quotation.generalDiscountPercent}% general discount</small>}</td>
+                {showMargin && <><td className="quotation-amount-cell"><strong>Rs. {quotationConvertedAmount(quotation, productById).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong></td><td className="quotation-margin-cell">{quotation.items?.length ? <Tooltip placement="top" overlayClassName="quotation-list-tooltip" title={<QuotationListTooltip heading="Product margins" rows={quotation.items.map((item) => `${quotationItemValue(item, productById)}: ${Number(productById.get(String(item.productId))?.marginPercent || 0).toLocaleString("en-IN")}%`)} />}><small>{quotationMarginsText(quotation, productById)}</small></Tooltip> : <span>—</span>}</td></>}<td className="quotation-amount-cell"><strong>Rs. {Number(quotation.amount || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong>{Number(quotation.generalDiscountPercent) > 0 && <small>{quotation.generalDiscountPercent}% general discount</small>}</td>
                 <td className="quotation-status-column"><div className="quotation-table-status" onClick={(event) => event.stopPropagation()}><LeadDropdown value={pendingStatuses[quotation._id] || quotation.status} options={quotationStatuses} onChange={(status) => updateStatus(quotation, status)} disabled={!canEdit || Boolean(pendingStatuses[quotation._id])} loading={Boolean(pendingStatuses[quotation._id])} ariaLabel={`Status for ${quotation.company || "quotation"}`} /></div></td>
                 <td><div className="quotation-contact"><span className={!quotation.email ? "is-empty" : ""}><Mail size={14} />{quotation.email || "No email"}</span><span className={!quotation.phone ? "is-empty" : ""}><Phone size={14} /><PhoneLink phone={quotation.phone} /></span></div></td><td>{quotation.createdByName || "You"}</td>
-                <td><div className="table-actions" onClick={(event) => event.stopPropagation()}><button className="icon-action download" type="button" title="Download quotation PDF" aria-label={`Download quotation for ${quotation.company || "company"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={16} /></button>{canDelete && <button className="icon-action delete" type="button" title="Delete latest quotation" onClick={() => setDialog({ mode: "delete", quotation })}><Trash2 size={16} /></button>}{(canCreate || canEdit) && <Dropdown placement="bottomRight" trigger={["click"]} overlayClassName="quotation-action-dropdown" menu={{ items: quotationActionItems(quotation), onClick: ({ key, domEvent }) => { domEvent.stopPropagation(); handleQuotationAction(key, quotation); } }}><button className="icon-action quotation-menu" type="button" title="Duplicate, revise, or edit quotation" aria-label={`Open actions for ${quotation.company || "quotation"}`} aria-haspopup="menu"><MoreHorizontal size={18} /></button></Dropdown>}</div></td>
+                <td><div className="table-actions" onClick={(event) => event.stopPropagation()}>{(canEdit || quotation.notes) && <button className="icon-action quotation-notes" type="button" title={quotation.notes ? "View or edit internal notes" : "Add internal notes"} aria-label={`Manage internal notes for ${quotation.company || "quotation"}`} onClick={() => setDialog({ mode: "notes", quotation, notes: quotation.notes || "" })}><StickyNote size={16} /></button>}<button className="icon-action download" type="button" title="Download quotation PDF" aria-label={`Download quotation for ${quotation.company || "company"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={16} /></button>{canDelete && <button className="icon-action delete" type="button" title="Delete latest quotation" onClick={() => setDialog({ mode: "delete", quotation })}><Trash2 size={16} /></button>}{(canCreate || canEdit) && <Dropdown placement="bottomRight" trigger={["click"]} overlayClassName="quotation-action-dropdown" menu={{ items: quotationActionItems(quotation), onClick: ({ key, domEvent }) => { domEvent.stopPropagation(); handleQuotationAction(key, quotation); } }}><button className="icon-action quotation-menu" type="button" title="Duplicate, revise, or edit quotation" aria-label={`Open actions for ${quotation.company || "quotation"}`} aria-haspopup="menu"><MoreHorizontal size={18} /></button></Dropdown>}</div></td>
               </tr>
-            ); }) : <tr><td className="empty-table" colSpan={showMargin ? 10 : 9}>No quotations found for this filter.</td></tr>}
+            ); }) : <tr><td className="empty-table" colSpan={showMargin ? 10 : 8}>No quotations found for this filter.</td></tr>}
           </tbody>
         </table>
         <div ref={loadMoreRef} className="infinite-scroll-status" aria-live="polite">{searching && page > 1 ? <><LoaderCircle size={15} />Loading more quotations…</> : <span>{quotations.length} of {pagination.total || 0} quotations</span>}</div>
@@ -419,6 +443,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
                 <article className={index === 0 ? "latest" : ""} key={quotation._id}>
                   <div className="quotation-history-heading"><div><strong>{Number(quotation.revisionNumber) > 0 ? `Revision ${quotation.revisionNumber}` : "Original quotation"}</strong>{index === 0 && <span>Latest</span>}</div><div><button className="icon-action download" type="button" title="Download this version as PDF" aria-label={`Download ${Number(quotation.revisionNumber) > 0 ? `revision ${quotation.revisionNumber}` : "original quotation"}`} disabled={Boolean(pendingDownloads[quotation._id])} onClick={() => downloadPdf(quotation)}><Download size={15} /></button><time>{formatDisplayDate(quotation.quotationDate || quotation.createdAt)}</time></div></div>
                   <div className="quotation-history-summary"><span>Total <strong>{formatCurrency(quotation.amount)}</strong></span><span>General discount <strong>{quotation.generalDiscountPercent || 0}%</strong></span><span>Status <strong>{quotation.status}</strong></span></div>
+                  {quotation.notes && <div className="quotation-history-notes"><strong>Internal notes</strong><p>{quotation.notes}</p></div>}
                   <div className="quotation-history-products">{quotation.items?.map((item, itemIndex) => { const product = productById.get(String(item.productId)); return <span key={`${quotation._id}-${item.productId || "custom"}-${itemIndex}`}>{quotationItemDescription(item)} × {item.quantity} at {formatCurrency(quotationItemRate(item))}{showMargin && <> · Margin {product ? `${Number(product.marginPercent || 0).toLocaleString("en-IN")}%` : "—"}</>}</span>; })}</div>
                   <div className="quotation-change-list"><strong>Changes in this version</strong>{revisionChanges(quotation, previous).map((change) => <span key={change}>{change}</span>)}</div>
                 </article>
@@ -429,6 +454,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
         </div>
       )}
       {dialog?.mode === "delete" && <div className="modal-backdrop" role="presentation"><div className="confirm-modal"><div className="confirm-icon"><Trash2 size={20} /></div><h2>Delete this quotation?</h2><p>This will permanently remove the quotation for <strong>{dialog.quotation.company || "this company"}</strong>.</p><div className="modal-footer"><button className="secondary-action" type="button" onClick={() => setDialog(null)}>Cancel</button><button className="danger-action" type="button" onClick={deleteQuotation}>Delete quotation</button></div></div></div>}
+      {dialog?.mode === "notes" && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && setDialog(null)}><div className="user-modal quotation-notes-modal"><div className="modal-heading"><div><span className="dashboard-kicker"><StickyNote size={14} /> Internal notes</span><h2>{dialog.quotation.company || "Quotation"}</h2></div><button className="modal-close" disabled={saving} type="button" aria-label="Close notes" onClick={() => setDialog(null)}><X size={18} /></button></div><textarea maxLength={3000} readOnly={!canEdit} value={dialog.notes} onChange={(event) => setDialog({ ...dialog, notes: event.target.value })} placeholder="Add notes for your team. These notes are never included in the PDF." /><div className="modal-footer"><button className="secondary-action" type="button" disabled={saving} onClick={() => setDialog(null)}>Close</button>{canEdit && <LoadingButton loading={saving} loadingText="Saving notes…" onClick={saveQuotationNotes}>Save notes</LoadingButton>}</div></div></div>}
       {dialog && ["create", "copy", "edit", "revise"].includes(dialog.mode) && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && setDialog(null)}>
           <form className="user-modal quotation-modal" onSubmit={submitQuotation}>
@@ -452,6 +478,7 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
               <div className="full-field quotation-final-discount"><label>General discount %<input aria-label="General discount percentage" inputMode="decimal" type="text" value={form.generalDiscountMode === "amount" ? effectiveGeneralDiscountPercent : form.generalDiscountPercent} onFocus={(event) => event.target.select()} onChange={(event) => updateFinalDiscountPercent(event.target.value)} placeholder="0%" /></label><label>General discount amount<input aria-label="General discount amount" inputMode="decimal" type="text" value={form.generalDiscountMode === "percent" ? generalDiscount.toFixed(2) : form.generalDiscountAmount} onFocus={(event) => event.target.select()} onChange={(event) => updateFinalDiscountAmount(event.target.value)} placeholder="Rs. 0.00" /></label></div>
               <label>Freight / Packing amount<input min="0" step="0.01" type="number" value={form.freightPacking} onChange={(event) => setForm({ ...form, freightPacking: event.target.value })} placeholder="0.00" /></label>
               <label>Status<LeadDropdown value={form.status} options={quotationStatuses} onChange={(status) => setForm({ ...form, status })} /></label>
+              <label className="full-field">Internal notes<textarea maxLength={3000} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Visible only in the CRM. This is not included in the quotation PDF." /></label>
             </div>
             <div className="modal-footer"><button className="secondary-action" type="button" disabled={saving} onClick={() => setDialog(null)}>Cancel</button><LoadingButton loading={saving} loadingText={dialog.mode === "edit" ? "Saving changes…" : "Creating quotation…"} disabled={!form.leadId}>{dialog.mode === "create" ? "Create quotation" : dialog.mode === "copy" ? "Create duplicate quotation" : dialog.mode === "revise" ? "Create revised quote" : "Save changes"}</LoadingButton></div>
           </form>
