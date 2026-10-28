@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
-  BarChart3,
   Building2,
   Calendar,
   Check,
@@ -369,9 +368,6 @@ export default function ReportsWorkspace({ token }) {
       <div className="reports-header-strip">
         <div className="section-heading" style={{ marginBottom: 0 }}>
           <div>
-            <span className="dashboard-kicker">
-              <BarChart3 size={15} /> Relationship & Executive Intelligence
-            </span>
             <h1>Reports & Analytics Center</h1>
             <p>
               Generate one-click executive reports for your users, company clients, top-selling products, or run a complete master business report.
