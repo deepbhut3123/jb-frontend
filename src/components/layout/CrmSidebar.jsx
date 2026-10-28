@@ -1,7 +1,7 @@
 import {
   ContactRound,
   FileText,
-  // BarChart3,
+  BarChart3,
   FolderTree,
   LayoutDashboard,
   LogOut,
@@ -20,7 +20,7 @@ const navigationItems = [
   { icon: LayoutDashboard, label: "Dashboard", key: "dashboard" },
   { icon: ContactRound, label: "Leads", key: "leads" },
   { icon: FileText, label: "Quotations", key: "quotations" },
-  // { icon: BarChart3, label: "Reports", key: "reports" },
+  { icon: BarChart3, label: "Reports", key: "reports" },
 ];
 
 function CrmSidebar({
