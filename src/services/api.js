@@ -77,6 +77,7 @@ export const api = {
   updateUser: (token, id, body) => request(`/api/users/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   deleteUser: (token, id) => request(`/api/users/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }),
   products: (token, params = {}) => { const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString(); return request(`/api/products${query ? `?${query}` : ''}`, { headers: { Authorization: `Bearer ${token}` } }); },
+  productFilterOptions: (token) => request('/api/products/filter-options', { headers: { Authorization: `Bearer ${token}` } }),
   categories: (token) => request('/api/categories', { headers: { Authorization: `Bearer ${token}` } }),
   createCategory: (token, body) => request('/api/categories', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateCategory: (token, id, body) => request(`/api/categories/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),

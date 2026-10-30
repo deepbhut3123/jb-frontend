@@ -383,6 +383,31 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   });
 
   let y = doc.lastAutoTable.finalY + 6;
+  const quotationNotes = String(quotation.notes || '').trim();
+  if (quotationNotes) {
+    const noteLines = doc.splitTextToSize(quotationNotes, 174);
+    let lineOffset = 0;
+    while (lineOffset < noteLines.length) {
+      if (y > 175) { doc.addPage(); y = 14; }
+      const maxLines = Math.max(1, Math.floor((205 - y - 9) / 3.2));
+      const lines = noteLines.slice(lineOffset, lineOffset + maxLines);
+      const boxHeight = 9 + lines.length * 3.2;
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(215, 222, 230);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(10, y, 190, boxHeight, 1.2, 1.2, 'FD');
+      doc.setTextColor(...BLUE);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.text(lineOffset === 0 ? 'Notes' : 'Notes (continued)', 13, y + 5.5);
+      doc.setTextColor(...TEXT);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.text(lines, 13, y + 10, { lineHeightFactor: 1.15 });
+      y += boxHeight + 5;
+      lineOffset += lines.length;
+    }
+  }
   if (y > 215) { doc.addPage(); y = 14; }
   sectionTitle(doc, "Terms & Conditions", 10, y, 108);
   sectionTitle(doc, "Commercial Summary", 122, y, 78);
