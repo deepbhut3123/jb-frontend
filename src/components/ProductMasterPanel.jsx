@@ -1,5 +1,5 @@
 import { Dropdown, Select } from 'antd';
-import { ChevronDown, Download, Edit3, FileDown, LoaderCircle, Package, Plus, Save, Search, Trash2, Upload, X } from 'lucide-react';
+import { ArrowDownAZ, ArrowDownUp, ArrowUpAZ, ChevronDown, Download, Edit3, FileDown, LoaderCircle, Package, Plus, Save, Search, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { API_URL, api, getSession } from '../services/api.js';
@@ -12,6 +12,18 @@ const emptyProduct = { partCode: '', description: '', hsnCode: '', brand: '', ca
 const taxOptions = [0, 5, 12, 18, 28].map((value) => ({ value, label: `${value}% GST` }));
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
 const editableFields = ['partCode', 'description', 'brand', 'category', 'subCategory', 'subSubCategory', 'hsnCode', 'taxRate', 'dollarAmount', 'marginPercent'];
+const productColumns = [
+  { key: 'image', label: 'Image', sortValue: (product) => product.image ? 'Yes' : 'No' },
+  { key: 'partCode', label: 'Part Code', filterable: true, value: (product) => product.partCode || product.code || '' },
+  { key: 'description', label: 'Description', filterable: true, value: (product) => product.description || product.name || '' },
+  { key: 'brand', label: 'Brand', filterable: true, value: (product) => product.brand || '' },
+  { key: 'category', label: 'Category', filterable: true, value: (product) => product.category || '' },
+  { key: 'subCategory', label: 'Sub category', filterable: true, value: (product) => product.subCategory || '' },
+  { key: 'subSubCategory', label: 'Sub-sub category', filterable: true, value: (product) => product.subSubCategory || '' },
+  { key: 'hsnCode', label: 'HSN Code', filterable: true, value: (product) => product.hsnCode || '' },
+  { key: 'taxRate', label: 'GST', filterable: true, value: (product) => `${product.taxRate ?? 0}%`, sortValue: (product) => Number(product.taxRate ?? 0) },
+  { key: 'finalRate', label: 'Final rate', filterable: true, value: (product) => currency.format(Number(product.mrp ?? product.salePrice ?? 0)), sortValue: (product) => Number(product.mrp ?? product.salePrice ?? 0) },
+];
 function calculateFinalRate(dollarAmount, marginPercent, pricingSettings) {
   if (dollarAmount === '' || marginPercent === '') return null;
   const values = [dollarAmount, marginPercent, pricingSettings.dollarRate, pricingSettings.multiplier].map(Number);
@@ -42,6 +54,11 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   const savingRef = useRef(false);
   const tableWrapRef = useRef(null);
   const [status, setStatus] = useState('all');
+  const [columnFilters, setColumnFilters] = useState({});
+  const [sort, setSort] = useState(null);
+  const [openColumnFilter, setOpenColumnFilter] = useState(null);
+  const [filterOptions, setFilterOptions] = useState({});
+  const [filterOptionSearch, setFilterOptionSearch] = useState('');
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState(emptyProduct);
   const [imageFile, setImageFile] = useState(null);
@@ -60,6 +77,21 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
   const [pricingSettings, setPricingSettings] = useState({ dollarRate: 1, multiplier: 1 });
+  useEffect(() => {
+    if (!openColumnFilter) return undefined;
+    function closeOnOutsidePointer(event) {
+      if (!event.target.closest('.product-column-filter')) setOpenColumnFilter(null);
+    }
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') setOpenColumnFilter(null);
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openColumnFilter]);
   const loadMoreRef = useInfiniteScroll({
     rootRef: tableWrapRef,
     hasMore: page < pagination.totalPages,
@@ -72,7 +104,8 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   }, [search]);
   useEffect(() => {
     const currentRequest = ++searchRequestId.current;
-    const params = { page, limit: 20, status: status === 'all' ? undefined : status, search: debouncedSearch };
+    const params = { page, limit: 20, status: status === 'all' ? undefined : status, search: debouncedSearch, ...(sort ? { sortBy: sort.key, sortOrder: sort.direction } : {}) };
+    Object.entries(columnFilters).forEach(([key, value]) => { if (value) params[`filter_${key}`] = value; });
     setSearching(true);
     api.products(token, params)
       .then((response) => {
@@ -82,7 +115,10 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
       })
       .catch((error) => currentRequest === searchRequestId.current && toast.error(error.message))
       .finally(() => { if (currentRequest === searchRequestId.current) setSearching(false); });
-  }, [debouncedSearch, page, setProducts, status, token]);
+  }, [columnFilters, debouncedSearch, page, setProducts, sort, status, token]);
+  useEffect(() => {
+    api.productFilterOptions(token).then((response) => setFilterOptions(response.options || {})).catch((error) => toast.error(error.message));
+  }, [token]);
   useEffect(() => {
     api.pricingSettings(token).then((response) => setPricingSettings(response.settings || { dollarRate: 1, multiplier: 1 })).catch((error) => toast.error(error.message));
   }, [token]);
@@ -101,6 +137,16 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
     const searchable = [product.partCode, product.code, product.description, product.name, product.brand, product.category, product.subCategory, product.subSubCategory, product.hsnCode].filter(Boolean).join(' ').toLowerCase();
     return matchesStatus && (!query || searchable.includes(query));
   }), [products, search, status]);
+  function setColumnSort(key, direction) {
+    setSort({ key, direction });
+    setPage(1);
+    setOpenColumnFilter(null);
+  }
+  function setColumnFilter(key, value) {
+    setColumnFilters((current) => ({ ...current, [key]: value }));
+    setPage(1);
+    setOpenColumnFilter(null);
+  }
   const displayedProducts = bulkEditing ? filteredProducts.filter((product) => bulkDrafts[product._id]) : filteredProducts;
   useEffect(() => {
     if (!bulkEditing || !products.length) return;
@@ -352,11 +398,18 @@ function ProductMasterPanel({ products, setProducts, categories, token }) {
   async function deleteProduct() { setSaving(true); try { await api.deleteProduct(token, dialog.product._id); setProducts((current) => current.filter((product) => product._id !== dialog.product._id)); setDialog(null); toast.success('Product deleted successfully.'); } catch (error) { toast.error(error.message); } finally { setSaving(false); } }
   const calculatedRate = (calculateFinalRate(form.dollarAmount, form.marginPercent, pricingSettings) ?? 0).toFixed(2);
   const field = (key, label, props = {}) => <>{<label>{label}<input {...props} disabled={key === 'mrp'} readOnly={key === 'mrp'} value={key === 'mrp' ? calculatedRate : form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} /></label>}{key === 'description' && <><label>Dollar amount (USD) *<input required min="0" step="any" inputMode="decimal" type="number" value={form.dollarAmount} onChange={(event) => setForm({ ...form, dollarAmount: event.target.value })} placeholder="0.00" /></label><label>Margin percentage *<input required min="0" step="any" inputMode="decimal" type="number" value={form.marginPercent} onChange={(event) => setForm({ ...form, marginPercent: event.target.value })} placeholder="0" /></label></>}</>;
+  function columnHeader(column) {
+    const selectedValue = columnFilters[column.key] || '';
+    const options = filterOptions[column.key] || [];
+    const visibleOptions = options.filter((option) => option.toLowerCase().includes(filterOptionSearch.trim().toLowerCase()));
+    const isFilterOpen = openColumnFilter === column.key;
+    return <th key={column.key}><div className="product-column-heading"><span>{column.label}</span><button type="button" className={`product-column-menu-button${selectedValue || sort?.key === column.key ? ' active' : ''}`} title={`${column.label} options`} aria-label={`${column.label} filter and sort options`} aria-expanded={isFilterOpen} onClick={() => { setFilterOptionSearch(''); setOpenColumnFilter(isFilterOpen ? null : column.key); }}><ArrowDownUp size={14} /></button>{isFilterOpen && <div className="product-column-filter" onClick={(event) => event.stopPropagation()}><div className="product-column-menu-title"><span>Column options</span><small>{column.label}</small></div><div className="product-column-menu-section"><span className="product-column-menu-label">Sort order</span><div className="product-column-sort-options"><button type="button" className={sort?.key === column.key && sort.direction === 'asc' ? 'selected' : ''} onClick={() => setColumnSort(column.key, 'asc')}><ArrowDownAZ size={16} /><span>A to Z</span>{sort?.key === column.key && sort.direction === 'asc' && <small>Active</small>}</button><button type="button" className={sort?.key === column.key && sort.direction === 'desc' ? 'selected' : ''} onClick={() => setColumnSort(column.key, 'desc')}><ArrowUpAZ size={16} /><span>Z to A</span>{sort?.key === column.key && sort.direction === 'desc' && <small>Active</small>}</button></div></div><div className="product-column-menu-section"><div className="product-column-filter-heading"><span className="product-column-menu-label">Filter by value</span>{selectedValue && <button type="button" onClick={() => setColumnFilter(column.key, '')}>Clear</button>}</div><input className="product-column-filter-search" type="search" aria-label={`Search ${column.label} values`} placeholder="Search values…" value={filterOptionSearch} onChange={(event) => setFilterOptionSearch(event.target.value)} /><div className="product-column-filter-list" role="listbox" aria-label={`${column.label} values`}><button type="button" role="option" aria-selected={!selectedValue} className={!selectedValue ? 'selected' : ''} onClick={() => setColumnFilter(column.key, '')}><span>All values</span>{!selectedValue && <span className="product-column-filter-check">✓</span>}</button>{visibleOptions.map((option) => <button key={option} type="button" role="option" aria-selected={selectedValue === option} className={selectedValue === option ? 'selected' : ''} title={option} onClick={() => setColumnFilter(column.key, option)}><span>{option}</span>{selectedValue === option && <span className="product-column-filter-check">✓</span>}</button>)}{visibleOptions.length === 0 && <p>No matching values</p>}</div></div></div>}</div></th>;
+  }
   return <div className="crm-content-inner product-master-page">
     <div className="section-heading"><div><h1>Products</h1><p>Maintain the product catalogue used across the CRM.</p></div><div className="product-heading-actions"><input ref={importInput} type="file" accept=".csv,text/csv" className="product-import-input" aria-label="Choose product CSV file" onChange={selectImportFile} />{bulkEditing ? <><button className="secondary-action" type="button" disabled={saving} onClick={cancelBulkEdit}>Cancel</button><button className="primary-action" type="button" disabled={saving} onClick={saveBulkEdit}><Save size={17} />{saving ? 'Saving…' : 'Save changes'}</button></> : <><Dropdown menu={fileMenu} trigger={['click']} placement="bottomRight" overlayClassName="product-file-menu"><button className="secondary-action product-files-button" type="button" disabled={importing || exporting}><FileDown size={17} />Import / export<ChevronDown size={15} /></button></Dropdown>{canEdit && <button className="secondary-action" type="button" disabled={!filteredProducts.length} onClick={startBulkEdit}><Edit3 size={17} />Bulk edit</button>}{canCreate && <button className="primary-action" type="button" onClick={openCreate}><Plus size={17} />Add product</button>}</>}</div></div>
     <div className="product-toolbar"><div className="user-tabs product-status-tabs"><button className={status === 'all' ? 'active' : ''} type="button" onClick={() => { setStatus('all'); setPage(1); }}>All products</button><button className={status === 'active' ? 'active' : ''} type="button" onClick={() => { setStatus('active'); setPage(1); }}>Active</button><button className={status === 'inactive' ? 'active' : ''} type="button" onClick={() => { setStatus('inactive'); setPage(1); }}>Inactive</button></div><label className="user-search"><Search size={16} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search part code, description, brand" />{searching && <LoaderCircle className="module-search-spinner" size={15} aria-label="Searching" />}</label></div>
     {bulkEditing && <p className="product-bulk-hint">Editing {displayedProducts.length} matching product{displayedProducts.length === 1 ? '' : 's'} ({Object.keys(bulkDrafts).length} loaded this session). Search, filter, or scroll to load more products; your edits are kept until you save or cancel.</p>}
-    <div className="product-table-wrap" ref={tableWrapRef}><table className={`product-table${bulkEditing ? ' bulk-editing' : ''}`}><thead><tr><th>Image</th><th>Part Code</th><th>Description</th><th>Brand</th><th>Category</th><th>Sub category</th><th>Sub-sub category</th><th>HSN Code</th><th>GST</th><th>Final rate</th>{!bulkEditing && <th className="actions-heading">Actions</th>}</tr></thead><tbody>{displayedProducts.length ? displayedProducts.map((product) => {
+    <div className="product-table-wrap" ref={tableWrapRef}><table className={`product-table${bulkEditing ? ' bulk-editing' : ''}`}><thead><tr>{productColumns.map(columnHeader)}{!bulkEditing && <th className="actions-heading">Actions</th>}</tr></thead><tbody>{displayedProducts.length ? displayedProducts.map((product) => {
       const draft = bulkDrafts[product._id];
       const rowCategory = categories.find((category) => category.name === draft?.category);
       const rowCategories = categories.map((category) => ({ value: category.name, label: category.name }));
