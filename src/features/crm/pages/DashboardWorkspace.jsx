@@ -150,7 +150,7 @@ function productCatalogBreakdown(products, dimension) {
 }
 
 function formatCompactCurrency(value) {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', notation: Number(value) >= 100000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(Number(value || 0));
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', notation: Number(value) >= 1000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(Number(value || 0));
 }
 
 const chartStyleIcons = { bar: BarChartOutlined, columns: BarChartOutlined, line: LineChartOutlined, area: AreaChartOutlined, donut: PieChartOutlined, ranked: OrderedListOutlined };
@@ -196,7 +196,7 @@ function DonutChart({ data, valueFormatter = (value) => value.toLocaleString('en
 
 function TrendChart({ data, style, valueFormatter = (value) => value.toLocaleString('en-IN') }) {
   const max = Math.max(...data.map((item) => item.value), 1);
-  if (style === 'columns') return <div className="dashboard-column-chart"><div className="dashboard-columns">{data.map((item, index) => <div key={`${item.label}-${index}`}><strong>{valueFormatter(item.value)}</strong><i style={{ height: `${Math.max((item.value / max) * 100, item.value ? 8 : 2)}%` }} /></div>)}</div><div className="dashboard-axis-labels">{data.map((item, index) => <span key={`${item.label}-${index}`}>{item.label}</span>)}</div></div>;
+  if (style === 'columns') return <div className="dashboard-column-chart"><div className="dashboard-columns">{data.map((item, index) => <div key={`${item.label}-${index}`}><strong>{valueFormatter(item.value)}</strong><i style={{ height: `${Math.max((item.value / max) * 100, item.value ? 8 : 2)}%` }} /><small>{item.label}</small></div>)}</div></div>;
   const points = data.map((item, index) => ({ x: 20 + (index * 560) / Math.max(data.length - 1, 1), y: 185 - (item.value / max) * 145, ...item }));
   const line = points.map((point) => `${point.x},${point.y}`).join(' ');
   const area = `20,190 ${line} ${points.at(-1)?.x || 580},190`;
@@ -322,7 +322,7 @@ function DashboardOverview({ session }) {
 
     {canSeeLeads && <>
     <div className="dashboard-module-heading"><div><span className="dashboard-module-icon leads"><UsersRound size={18} /></span><div><span>Lead module</span><h2>Pipeline and acquisition intelligence</h2></div></div><small>{metrics.scheduled} follow-ups scheduled · {metrics.overdue} overdue</small></div>
-    <div className="dashboard-chart-grid">
+    <div className="dashboard-chart-grid dashboard-tri-grid">
       <section className="analytics-card dashboard-chart-card">
         <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Distribution</span><h2>Lead breakdown</h2></div><ChartControls dimension={preferences.breakdownDimension} dimensions={dimensionOptions} style={preferences.breakdownStyle} styles={[{ value: 'bar', label: 'Bar chart' }, { value: 'donut', label: 'Donut chart' }]} onDimension={(value) => updatePreference('breakdownDimension', value)} onStyle={(value) => updatePreference('breakdownStyle', value)} /></div>
         {preferences.breakdownStyle === 'donut' ? <DonutChart data={breakdown} /> : <BarChart data={breakdown} />}
@@ -331,25 +331,28 @@ function DashboardOverview({ session }) {
         <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Momentum</span><h2>Performance trend</h2></div><ChartControls dimension={preferences.trendMetric} dimensions={[{ value: 'created', label: 'New leads' }, { value: 'won', label: 'Completed leads' }, { value: 'followups', label: 'Scheduled follow-ups' }]} style={preferences.trendStyle} styles={[{ value: 'line', label: 'Line chart' }, { value: 'area', label: 'Area chart' }, { value: 'columns', label: 'Column chart' }]} onDimension={(value) => updatePreference('trendMetric', value)} onStyle={(value) => updatePreference('trendStyle', value)} /></div>
         <TrendChart data={trend} style={preferences.trendStyle} />
       </section>
-    </div>
-
-    <div className="dashboard-secondary-grid">
       <section className="analytics-card dashboard-chart-card">
         <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Comparison</span><h2>Top performers</h2></div><ChartControls dimension={preferences.comparisonDimension} dimensions={comparisonOptions} style={preferences.comparisonStyle} styles={[{ value: 'bar', label: 'Bar chart' }, { value: 'ranked', label: 'Ranked list' }, { value: 'donut', label: 'Donut chart' }]} onDimension={(value) => updatePreference('comparisonDimension', value)} onStyle={(value) => updatePreference('comparisonStyle', value)} /></div>
         {preferences.comparisonStyle === 'donut' ? <DonutChart data={comparison} /> : <BarChart data={comparison} ranked={preferences.comparisonStyle === 'ranked'} />}
       </section>
+    </div>
+    <div className="dashboard-chart-grid dashboard-duo-grid">
       <section className="analytics-card pipeline-health-card">
         <div className="analytics-card-heading"><div><span className="dashboard-kicker">Action centre</span><h2>Pipeline health</h2></div><ChartNoAxesCombined size={21} /></div>
         <div className="pipeline-health-summary"><div><strong>{metrics.open}</strong><span>Open</span></div><div><strong>{metrics.won}</strong><span>Won</span></div><div><strong>{metrics.lost}</strong><span>Lost</span></div></div>
         <div className="pipeline-health-track"><i className="open" style={{ width: `${filteredLeads.length ? (metrics.open / filteredLeads.length) * 100 : 0}%` }} /><i className="won" style={{ width: `${filteredLeads.length ? (metrics.won / filteredLeads.length) * 100 : 0}%` }} /><i className="lost" style={{ width: `${filteredLeads.length ? (metrics.lost / filteredLeads.length) * 100 : 0}%` }} /></div>
         <div className="dashboard-insights"><div><Clock3 size={16} /><span><strong>{metrics.overdue} overdue follow-ups</strong><small>Need attention now</small></span></div><div><Flame size={16} /><span><strong>{metrics.highPriority} hot opportunities</strong><small>High-priority open leads</small></span></div><div><Goal size={16} /><span><strong>{topSource?.label || 'No source data'}</strong><small>{topSource ? `${topSource.value} leads from your top source` : 'Add lead sources for insights'}</small></span></div></div>
       </section>
+      <section className="analytics-card activity-card dashboard-activity-card">
+        <div className="analytics-card-heading"><div><span className="dashboard-kicker">Recent activity</span><h2>Latest leads</h2></div><button className="text-action" type="button" onClick={() => navigate('/leads')}>View all leads</button></div>
+        {latest.length ? <div className="activity-list">{latest.map((lead) => <div className="activity-row" key={lead._id}><div className={`activity-status status-${String(lead.status || 'new').toLowerCase().replace(/[^a-z]/g, '')}`} /><div><strong>{lead.company || 'Unnamed company'}</strong><span>{lead.city || 'No city'} · {lead.status} · {lead.assignedName || 'Unassigned'}</span></div><span className={`activity-priority priority-${String(lead.priority || 'medium').toLowerCase()}`}>{lead.priority || 'Medium'}</span><time>{formatDisplayDate(lead.createdAt)}</time></div>)}</div> : <p className="analytics-empty">Create your first lead to see activity here.</p>}
+      </section>
     </div>
     </>}
 
     {canSeeQuotations && <>
     <div className="dashboard-module-heading"><div><span className="dashboard-module-icon quotations"><FileText size={18} /></span><div><span>Quotation module</span><h2>Quotation performance and value</h2></div></div><small>{quotationMetrics.accepted} accepted · {quotationMetrics.acceptanceRate}% success after decision</small></div>
-    <div className="dashboard-chart-grid">
+    <div className="dashboard-chart-grid dashboard-tri-grid">
       <section className="analytics-card dashboard-chart-card">
         <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Outcome</span><h2>Quotation status</h2></div><div className="dashboard-chart-controls"><ChartStyleButtons ariaLabel="Quotation status chart design" value={preferences.quotationStatusStyle || 'donut'} options={[{ value: 'donut', label: 'Donut chart' }, { value: 'bar', label: 'Bar chart' }]} onChange={(value) => updatePreference('quotationStatusStyle', value)} /></div></div>
         {(preferences.quotationStatusStyle || 'donut') === 'donut' ? <DonutChart data={quotationStatusData} /> : <BarChart data={quotationStatusData} />}
@@ -358,12 +361,12 @@ function DashboardOverview({ session }) {
         <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Commercial trend</span><h2>Quotation movement</h2></div><ChartControls dimension={preferences.quotationMetric} dimensions={[{ value: 'value', label: 'Quoted value' }, { value: 'acceptedValue', label: 'Accepted value' }, { value: 'count', label: 'Quotation count' }, { value: 'sentCount', label: 'Sent quotation count' }]} style={preferences.quotationStyle} styles={[{ value: 'line', label: 'Line chart' }, { value: 'area', label: 'Area chart' }, { value: 'columns', label: 'Column chart' }]} onDimension={(value) => updatePreference('quotationMetric', value)} onStyle={(value) => updatePreference('quotationStyle', value)} /></div>
         <TrendChart data={quotationTrend} style={preferences.quotationStyle} valueFormatter={quotationValueFormatter} />
       </section>
+      <section className="analytics-card dashboard-chart-card">
+        <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Team contribution</span><h2>User performance</h2></div><ChartControls dimension={preferences.userQuotationMetric} dimensions={[{ value: 'sentCount', label: 'Sent quotations' }, { value: 'createdCount', label: 'Created quotations' }, { value: 'acceptedCount', label: 'Accepted quotations' }, { value: 'quotedValue', label: 'Quoted value' }, { value: 'acceptedValue', label: 'Accepted value' }]} style={preferences.userQuotationStyle} styles={[{ value: 'ranked', label: 'Ranked list' }, { value: 'bar', label: 'Bar chart' }, { value: 'donut', label: 'Donut chart' }]} onDimension={(value) => updatePreference('userQuotationMetric', value)} onStyle={(value) => updatePreference('userQuotationStyle', value)} /></div>
+        {preferences.userQuotationStyle === 'donut' ? <DonutChart data={userQuotationData} valueFormatter={userQuotationValueFormatter} /> : <BarChart data={userQuotationData} ranked={preferences.userQuotationStyle === 'ranked'} valueFormatter={userQuotationValueFormatter} />}
+        <p className="dashboard-chart-note">Performance is assigned to the quotation creator. Accepted value is a sales indicator, not invoiced revenue.</p>
+      </section>
     </div>
-    <section className="analytics-card dashboard-chart-card dashboard-user-quotation-card">
-      <div className="analytics-card-heading dashboard-card-heading"><div><span className="dashboard-kicker">Team contribution</span><h2>Quotation performance by user</h2></div><ChartControls dimension={preferences.userQuotationMetric} dimensions={[{ value: 'sentCount', label: 'Sent quotations' }, { value: 'createdCount', label: 'Created quotations' }, { value: 'acceptedCount', label: 'Accepted quotations' }, { value: 'quotedValue', label: 'Quoted value' }, { value: 'acceptedValue', label: 'Accepted value' }]} style={preferences.userQuotationStyle} styles={[{ value: 'ranked', label: 'Ranked list' }, { value: 'bar', label: 'Bar chart' }, { value: 'donut', label: 'Donut chart' }]} onDimension={(value) => updatePreference('userQuotationMetric', value)} onStyle={(value) => updatePreference('userQuotationStyle', value)} /></div>
-      {preferences.userQuotationStyle === 'donut' ? <DonutChart data={userQuotationData} valueFormatter={userQuotationValueFormatter} /> : <BarChart data={userQuotationData} ranked={preferences.userQuotationStyle === 'ranked'} valueFormatter={userQuotationValueFormatter} />}
-      <p className="dashboard-chart-note">Performance is assigned to the quotation creator. Accepted value is a sales indicator, not invoiced revenue.</p>
-    </section>
     </>}
 
     {canSeeProducts && <>
@@ -380,10 +383,6 @@ function DashboardOverview({ session }) {
     </div>
     </>}
 
-    {canSeeLeads && <section className="analytics-card activity-card dashboard-activity-card">
-      <div className="analytics-card-heading"><div><span className="dashboard-kicker">Recent activity</span><h2>Latest leads</h2></div><button className="text-action" type="button" onClick={() => navigate('/leads')}>View all leads</button></div>
-      {latest.length ? <div className="activity-list">{latest.map((lead) => <div className="activity-row" key={lead._id}><div className={`activity-status status-${String(lead.status || 'new').toLowerCase().replace(/[^a-z]/g, '')}`} /><div><strong>{lead.company || 'Unnamed company'}</strong><span>{lead.city || 'No city'} · {lead.status} · {lead.assignedName || 'Unassigned'}</span></div><span className={`activity-priority priority-${String(lead.priority || 'medium').toLowerCase()}`}>{lead.priority || 'Medium'}</span><time>{formatDisplayDate(lead.createdAt)}</time></div>)}</div> : <p className="analytics-empty">Create your first lead to see activity here.</p>}
-    </section>}
     {!canSeeAnyAnalytics && <section className="analytics-card"><p className="analytics-empty">No module analytics are available with your current permissions.</p></section>}
   </div>;
 }

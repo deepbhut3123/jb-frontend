@@ -18,9 +18,10 @@ import CustomersWorkspace from './pages/CustomersWorkspace.jsx';
 import ProfileWorkspace from './pages/ProfileWorkspace.jsx';
 import RolesWorkspace from './pages/RolesWorkspace.jsx';
 import ReportsWorkspace from './pages/ReportsWorkspace.jsx';
+import SalesOrdersWorkspace from './pages/SalesOrdersWorkspace.jsx';
 import { canView, isAdministrator } from '../../utils/permissions.js';
 
-const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', reports: '/reports', categories: '/categories', products: '/products', users: '/users', roles: '/roles', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers', profile: '/profile' };
+const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', salesOrders: '/sales-orders', reports: '/reports', categories: '/categories', products: '/products', users: '/users', roles: '/roles', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers', profile: '/profile' };
 
 function CrmWorkspace({ section = 'dashboard' }) {
   const session = getSession();
@@ -165,6 +166,7 @@ function CrmWorkspace({ section = 'dashboard' }) {
             : section === 'products' ? <ProductMasterPanel products={products} setProducts={setProducts} categories={categories} token={session.token} />
               : section === 'categories' ? <CategoryMasterPanel categories={categories} setCategories={setCategories} token={session.token} />
                 : section === 'quotations' ? <QuotationsPanel quotations={quotations} setQuotations={setQuotations} leads={leads} token={session.token} products={products} />
+                    : section === 'salesOrders' ? <SalesOrdersWorkspace token={session.token} />
                   : <DashboardOverview data={data} session={{ ...session, user: currentUser }} />}
         </ModuleLoading>
       </div>
