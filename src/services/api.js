@@ -96,6 +96,7 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
     return request(`/api/quotations${query ? `?${query}` : ''}`, { ...options, headers: { Authorization: `Bearer ${token}` } });
   },
+  quotationPriceSuggestion: (token, leadId, productId, productCode) => request(`/api/quotations/pricing-history?${new URLSearchParams({ leadId, productId, productCode })}`, { headers: { Authorization: `Bearer ${token}` } }),
   createQuotation: (token, body) => request('/api/quotations', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateQuotation: (token, id, body) => request(`/api/quotations/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   updateQuotationNotes: (token, id, notes) => request(`/api/quotations/${id}/notes`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ notes }) }),
