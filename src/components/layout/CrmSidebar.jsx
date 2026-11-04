@@ -1,11 +1,12 @@
 import {
   ContactRound,
+  ClipboardList,
   FileText,
   BarChart3,
   FolderTree,
   LayoutDashboard,
   LogOut,
-  // MessageCircle,
+  MessageCircle,
   Package,
   ShieldCheck,
   UserRound,
@@ -19,8 +20,16 @@ import logo from "../../assets/jb-corporation-logo.png";
 const navigationItems = [
   { icon: LayoutDashboard, label: "Dashboard", key: "dashboard" },
   { icon: ContactRound, label: "Leads", key: "leads" },
+  { icon: UsersRound, label: "Customers", key: "customers" },
   { icon: FileText, label: "Quotations", key: "quotations" },
+  { icon: ClipboardList, label: "Sales Orders", key: "salesOrders" },
+  { icon: Package, label: "Products", key: "products" },
   { icon: BarChart3, label: "Reports", key: "reports" },
+  { icon: FolderTree, label: "Categories", key: "categories" },
+  { icon: Settings, label: "Settings", key: "settings" },
+  { icon: UserRound, label: "User Management", key: "users" },
+  { icon: ShieldCheck, label: "Roles & Permissions", key: "roles", adminOnly: true },
+  { icon: MessageCircle, label: "Integrations", key: "whatsapp", adminOnly: true },
 ];
 
 function CrmSidebar({
@@ -44,7 +53,7 @@ function CrmSidebar({
         <img className="crm-brand-icon" src={icon} alt="" aria-hidden="true" />
       </div>
       <nav className="crm-navigation" aria-label="CRM navigation">
-        {navigationItems.filter((item) => canView(session.user, item.key)).map((item) => {
+        {navigationItems.filter((item) => item.adminOnly ? isAdmin : canView(session.user, item.key)).map((item) => {
           const MenuIcon = item.icon;
           return (
             <button
@@ -59,70 +68,7 @@ function CrmSidebar({
             </button>
           );
         })}
-        {canView(session.user, 'products') && (
-          <button
-            className={activeSection === "products" ? "active" : ""}
-            data-tooltip="Products"
-            type="button"
-            onClick={() => onNavigate("products")}
-          >
-            <Package aria-hidden="true" size={19} strokeWidth={1.8} />
-            <span className="sidebar-label">Products</span>
-          </button>
-        )}
-        {canView(session.user, 'customers') && <button className={activeSection === "customers" ? "active" : ""} data-tooltip="Customers" type="button" onClick={() => onNavigate("customers")}>
-          <UsersRound aria-hidden="true" size={19} strokeWidth={1.8} /><span className="sidebar-label">Customers</span>
-        </button>}
-        {canView(session.user, 'settings') && (
-          <button className={activeSection === "settings" ? "active" : ""} data-tooltip="Settings" type="button" onClick={() => onNavigate("settings")}>
-            <Settings aria-hidden="true" size={19} strokeWidth={1.8} /><span className="sidebar-label">Settings</span>
-          </button>
-        )}
-        {canView(session.user, 'categories') && (
-          <button
-            className={activeSection === "categories" ? "active" : ""}
-            data-tooltip="Categories"
-            type="button"
-            onClick={() => onNavigate("categories")}
-          >
-            <FolderTree aria-hidden="true" size={19} strokeWidth={1.8} />
-            <span className="sidebar-label">Categories</span>
-          </button>
-        )}
-        {canView(session.user, 'users') && (
-          <button
-            className={activeSection === "users" ? "active" : ""}
-            data-tooltip="User Management"
-            type="button"
-            onClick={() => onNavigate("users")}
-          >
-            <UserRound aria-hidden="true" size={19} strokeWidth={1.8} />
-            <span className="sidebar-label">User Management</span>
-          </button>
-        )}
-        {isAdmin && (
-          <button className={activeSection === "roles" ? "active" : ""} data-tooltip="Roles & Permissions" type="button" onClick={() => onNavigate("roles")}>
-            <ShieldCheck aria-hidden="true" size={19} strokeWidth={1.8} />
-            <span className="sidebar-label">Roles & Permissions</span>
-          </button>
-        )}
       </nav>
-      {/* {isAdmin && (
-        <nav
-          className="crm-navigation crm-integrations-navigation"
-          aria-label="Integrations"
-        >
-          <button
-            className={activeSection === "whatsapp" ? "active" : ""}
-            data-tooltip="Integrations"
-            type="button"
-            onClick={() => onNavigate("whatsapp")}
-          >
-            <MessageCircle aria-hidden="true" size={19} strokeWidth={1.8} />
-            Integrations
-          </button>
-        </nav>
-      )} */}
       <div className="sidebar-user">
         <button className={`sidebar-profile-link${activeSection === "profile" ? " active" : ""}`} data-tooltip="Profile" type="button" onClick={() => onNavigate("profile")}>
           <span className="user-avatar">{session.user.name.slice(0, 1).toUpperCase()}</span>

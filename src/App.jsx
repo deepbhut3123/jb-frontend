@@ -14,6 +14,7 @@ const protectedRoutes = {
   '/products': { section: 'products' },
   '/categories': { section: 'categories' },
   '/quotations': { section: 'quotations' },
+  '/sales-orders': { section: 'salesOrders', path: '/sales-orders' },
   '/reports': { section: 'reports' },
   '/whatsapp': { section: 'whatsapp' },
   '/settings': { section: 'settings' },
@@ -42,7 +43,7 @@ function RedirectToLogin() { useEffect(() => navigate('/login'), []); return nul
 function RedirectToAllowedPage({ user }) {
   useEffect(() => {
     const firstAllowed = Object.values(protectedRoutes).find((item) => !item.adminOnly && canView(user, item.section));
-    navigate(firstAllowed ? `/${firstAllowed.section}` : '/profile');
+    navigate(firstAllowed ? firstAllowed.path || `/${firstAllowed.section}` : '/profile');
   }, [user]);
   return null;
 }

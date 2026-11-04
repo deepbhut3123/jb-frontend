@@ -8,7 +8,7 @@ import ModuleLoading from '../../components/ModuleLoading.jsx';
 import GlobalSearch from '../../components/GlobalSearch.jsx';
 import { api, clearSession, getSession, saveSession } from '../../services/api.js';
 import { navigate } from '../../utils/navigation.js';
-import DashboardOverview from './pages/DashboardWorkspace.jsx';
+import DashboardOverview from './pages/SalesActionDashboard.jsx';
 import LeadsPanel from './pages/LeadsWorkspace.jsx';
 import QuotationsPanel from './pages/QuotationsWorkspace.jsx';
 import UsersPanel from './pages/UsersWorkspace.jsx';
@@ -18,9 +18,10 @@ import CustomersWorkspace from './pages/CustomersWorkspace.jsx';
 import ProfileWorkspace from './pages/ProfileWorkspace.jsx';
 import RolesWorkspace from './pages/RolesWorkspace.jsx';
 import ReportsWorkspace from './pages/ReportsWorkspace.jsx';
+import SalesOrdersWorkspace from './pages/SalesOrdersWorkspace.jsx';
 import { canView, isAdministrator } from '../../utils/permissions.js';
 
-const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', reports: '/reports', categories: '/categories', products: '/products', users: '/users', roles: '/roles', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers', profile: '/profile' };
+const routePaths = { dashboard: '/dashboard', leads: '/leads', quotations: '/quotations', salesOrders: '/sales-orders', reports: '/reports', categories: '/categories', products: '/products', users: '/users', roles: '/roles', whatsapp: '/whatsapp', settings: '/settings', customers: '/customers', profile: '/profile' };
 
 function CrmWorkspace({ section = 'dashboard' }) {
   const session = getSession();
@@ -152,7 +153,7 @@ function CrmWorkspace({ section = 'dashboard' }) {
     <button className="mobile-sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setSidebarCollapsed(true)} />
     <section className="crm-workspace">
       <header className="crm-header"><div className="header-title"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setSidebarCollapsed((current) => !current)}><Menu size={18} strokeWidth={1.8} /></button><div><h2>Internal CRM</h2></div></div>{section === 'dashboard' && <GlobalSearch token={session.token} onSelect={openGlobalResult} />}<div className="header-role"><ShieldCheck size={16} /><span>{isAdmin ? 'Admin' : 'User'}</span></div></header>
-      <div className="crm-content">
+      <div className={`crm-content${section === 'dashboard' ? ' crm-content-dashboard' : ''}`}>
         <ModuleLoading key={`${section}-${contentVersion}`} section={section} token={session.token}>
         {section === 'profile' ? <ProfileWorkspace token={session.token} user={currentUser} onProfileUpdated={updateCurrentUser} />
           : section === 'customers' ? <CustomersWorkspace leads={leads} setLeads={setLeads} token={session.token} />
@@ -165,6 +166,7 @@ function CrmWorkspace({ section = 'dashboard' }) {
             : section === 'products' ? <ProductMasterPanel products={products} setProducts={setProducts} categories={categories} token={session.token} />
               : section === 'categories' ? <CategoryMasterPanel categories={categories} setCategories={setCategories} token={session.token} />
                 : section === 'quotations' ? <QuotationsPanel quotations={quotations} setQuotations={setQuotations} leads={leads} token={session.token} products={products} />
+                    : section === 'salesOrders' ? <SalesOrdersWorkspace token={session.token} />
                   : <DashboardOverview data={data} session={{ ...session, user: currentUser }} />}
         </ModuleLoading>
       </div>

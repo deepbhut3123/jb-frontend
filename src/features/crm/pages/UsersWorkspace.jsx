@@ -191,6 +191,7 @@ function UsersPanel({ users, setUsers, token }) {
         <table className="users-table">
           <thead>
             <tr>
+              <th scope="col">S.No.</th>
               <th>Name</th>
               <th>Email</th>
               <th>Phone</th>
@@ -201,8 +202,9 @@ function UsersPanel({ users, setUsers, token }) {
           </thead>
           <tbody>
             {filteredUsers.length ? (
-              filteredUsers.map((user) => (
+              filteredUsers.map((user, index) => (
                 <tr key={user._id} data-record-id={user._id}>
+                  <td>{index + 1}</td>
                   <td>
                     <div className="table-user">
                       <span>{user.name.slice(0, 1).toUpperCase()}</span>
@@ -248,7 +250,7 @@ function UsersPanel({ users, setUsers, token }) {
               ))
             ) : (
               <tr>
-                <td className="empty-table" colSpan="6">
+                <td className="empty-table" colSpan="7">
                   No accounts match your search.
                 </td>
               </tr>

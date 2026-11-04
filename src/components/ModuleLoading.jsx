@@ -10,7 +10,8 @@ const moduleRequests = {
   products: ['api/products', 'api/categories'],
   categories: ['api/categories'],
   quotations: ['api/quotations', 'api/products'],
-  settings: ['api/pricing-settings'],
+  salesOrders: ['api/sales-orders'],
+  settings: ['api/pricing-settings', 'api/smtp-settings'],
   customers: ['api/leads'],
   reports: ['api/reports/catalog'],
 };

@@ -10,11 +10,11 @@ test('exported CSV imports quoted descriptions and inactive products', () => {
   const csv = exportProductsCsv([{ partCode: 'JB-01', description: 'Valve, "large"\nsteel', brand: 'JB', category: 'Valves', subCategory: 'Steel', subSubCategory: 'Stainless', hsnCode: '1234', taxRate: 5, dollarAmount: 129.5, marginPercent: 12, isActive: false, image: '/public/products/valve.png' }]);
   const result = importProductsCsv(csv);
   assert.deepEqual(result.errors, []);
-  assert.deepEqual(result.products, [{ rowNumber: 2, partCode: 'JB-01', description: 'Valve, "large"\nsteel', brand: 'JB', category: 'Valves', subCategory: 'Steel', subSubCategory: 'Stainless', hsnCode: '1234', taxRate: 5, dollarAmount: 129.5, marginPercent: 12, isActive: false, image: '/public/products/valve.png' }]);
+  assert.deepEqual(result.products, [{ rowNumber: 2, partCode: 'JB-01', description: 'Valve, "large"\nsteel', brand: 'JB', category: 'Valves', subCategory: 'Steel', subSubCategory: 'Stainless', hsnCode: '1234', taxRate: 5, currency: 'USD', dollarAmount: 129.5, marginPercent: 12, isActive: false, image: '/public/products/valve.png' }]);
 });
 
 test('import rejects duplicate part codes and invalid prices without sending those rows', () => {
-  const csv = `${exportProductsCsv([])}jb-01,Valve,,Valves,,,,18,100,0,Yes,\r\nJB-01,Other,,Valves,,,,18,50,0,Yes,\r\nJB-03,Other,,Valves,,,,18,-1,0,Yes,\r\n`;
+  const csv = `${exportProductsCsv([])}jb-01,Valve,,Valves,,,,18,USD,100,0,Yes,\r\nJB-01,Other,,Valves,,,,18,USD,50,0,Yes,\r\nJB-03,Other,,Valves,,,,18,USD,-1,0,Yes,\r\n`;
   const result = importProductsCsv(csv);
   assert.equal(result.products.length, 1);
   assert.equal(result.errors.length, 2);
@@ -31,4 +31,22 @@ test('previous templates without a sub-sub category column still import', () => 
   assert.equal(Object.hasOwn(result.products[0], 'subSubCategory'), false);
   assert.equal(result.products[0].dollarAmount, 100);
   assert.equal(result.products[0].marginPercent, 0);
+});
+
+test('INR imports use the price directly and do not apply USD conversion', () => {
+  const csv = `${exportProductsCsv([])}JB-03,Local part,,Parts,,,,18,INR,1250,15,Yes,\r\n`;
+  const result = importProductsCsv(csv);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.products[0].currency, 'INR');
+  assert.equal(result.products[0].mrp, 1250);
+  assert.equal(result.products[0].dollarAmount, 0);
+  assert.equal(result.products[0].marginPercent, 0);
+});
+
+test('INR product exports preserve currency and the direct price', () => {
+  const csv = exportProductsCsv([{ partCode: 'JB-INR', description: 'Local part', category: 'Parts', currency: 'INR', mrp: 1250, dollarAmount: 0 }]);
+  const result = importProductsCsv(csv);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.products[0].currency, 'INR');
+  assert.equal(result.products[0].mrp, 1250);
 });

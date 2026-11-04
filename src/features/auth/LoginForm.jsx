@@ -26,7 +26,7 @@ function LoginForm() {
         </button>
       </div>
     </div>
-    <div className="form-options"><label className="check-row"><input type="checkbox" />Remember me</label><button className="link-button" type="button" onClick={() => navigate('/forgot-password')}>Forgot password?</button></div>
+    <div className="form-options"><label className="check-row"><input type="checkbox" />Remember me</label>{/* <button className="link-button" type="button" onClick={() => navigate('/forgot-password')}>Forgot password?</button> */}</div>
     {state.error && <p className="form-message error">{state.error}</p>}
     <LoadingButton loading={state.loading} loadingText="Signing in…">Sign in to CRM</LoadingButton>
   </form>;

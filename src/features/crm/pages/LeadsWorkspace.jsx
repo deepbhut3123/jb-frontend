@@ -391,7 +391,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
         ),
       );
       setStatus("All");
-      toast.success("Lead updated.");
+      toast.success(result.salesOrderCreated ? "Lead updated and sales order created." : "Lead updated.");
     } catch (error) {
       toast.error(error.message);
     }
@@ -418,11 +418,9 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
       setStatus("All");
       setSearch("");
       setDialog(null);
-      toast.success(
-        mode === "create"
-          ? "Lead added successfully."
-          : "Lead updated successfully.",
-      );
+      toast.success(result.salesOrderCreated
+        ? "Lead saved and sales order created."
+        : mode === "create" ? "Lead added successfully." : "Lead updated successfully.");
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -593,6 +591,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
         <table className="leads-table">
           <thead>
             <tr>
+              <th scope="col">S.No.</th>
               <th>Company</th>
               <th>City</th>
               <th>Contact</th>
@@ -605,13 +604,14 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
           </thead>
           <tbody>
             {filteredLeads.length ? (
-              filteredLeads.map((lead) => (
+              filteredLeads.map((lead, index) => (
                 <tr
                   key={lead._id}
                   data-lead-id={lead._id}
                   data-record-id={lead._id}
                   onClick={() => setDialog({ mode: "details", lead })}
                 >
+                  <td>{index + 1}</td>
                   <td>
                     <button
                       className="lead-name-button"
@@ -713,7 +713,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
               ))
             ) : (
               <tr>
-                <td className="empty-table" colSpan="8">
+                <td className="empty-table" colSpan="9">
                   No leads match your filters.
                 </td>
               </tr>
