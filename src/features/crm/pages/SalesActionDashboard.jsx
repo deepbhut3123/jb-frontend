@@ -2,7 +2,7 @@ import { createElement, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, CalendarDays, CheckCircle2, CircleX, ClipboardList, Clock3, FileText, Goal, Package, Search, TrendingUp, UsersRound } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../../services/api.js';
-import { can } from '../../../utils/permissions.js';
+import { can, isAdministrator } from '../../../utils/permissions.js';
 import { navigate } from '../../../utils/navigation.js';
 import './SalesActionDashboard.css';
 
@@ -91,6 +91,7 @@ function DashboardOverview({ session }) {
   const [quotations, setQuotations] = useState([]);
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
+  const [targets, setTargets] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -101,8 +102,9 @@ function DashboardOverview({ session }) {
       permissions.quotations ? loadPages((params) => api.quotations(session.token, params), 'quotations') : [],
       permissions.orders ? loadPages((params) => api.salesOrders(session.token, params), 'orders') : [],
       permissions.products ? loadPages((params) => api.products(session.token, params), 'products', 1000) : [],
-    ]).then(([nextLeads, nextQuotations, nextOrders, nextProducts]) => {
-      if (active) { setLeads(nextLeads); setQuotations(nextQuotations); setOrders(nextOrders); setProducts(nextProducts); }
+      api.dashboardTargets(session.token),
+    ]).then(([nextLeads, nextQuotations, nextOrders, nextProducts, nextTargets]) => {
+      if (active) { setLeads(nextLeads); setQuotations(nextQuotations); setOrders(nextOrders); setProducts(nextProducts); setTargets(nextTargets); }
     }).catch((error) => { if (active) toast.error(error.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [session.token, permissions.leads, permissions.quotations, permissions.orders, permissions.products]);
@@ -144,11 +146,10 @@ function DashboardOverview({ session }) {
   visibleQuotations.forEach((quotation) => (quotation.items || []).forEach((item) => { const name = label(item.productCode || item.productName, 'Unnamed product'); productDemand.set(name, (productDemand.get(name) || 0) + Number(item.quantity || 0)); }));
   const topProducts = [...productDemand].sort((a, b) => b[1] - a[1]).slice(0, 3);
 
-  if (!permissions.leads && !permissions.quotations && !permissions.orders && !permissions.products) return <div className="sad-dashboard"><p className="sad-empty">No dashboard data is available with your current permissions.</p></div>;
-
   return <div className="sad-dashboard">
     <div className="sad-top"><div><span className="sad-eyebrow">SALES OVERVIEW</span><h1>Sales &amp; Action Dashboard</h1><p>Sales performance, daily priorities and business health</p></div><div className="sad-toolbar"><label className="sad-search"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search leads, customers, quotations..." aria-label="Search dashboard data" /></label><label className="sad-period"><CalendarDays size={18} /><select value={period} onChange={(event) => setPeriod(event.target.value)} aria-label="Dashboard period"><option value="all">All time</option><option value="month">This month</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last year</option></select></label></div></div>
     {loading && <p className="sad-loading">Loading dashboard data…</p>}
+    {!permissions.leads && !permissions.quotations && !permissions.orders && !permissions.products && <p className="sad-empty">No other dashboard data is available with your current permissions.</p>}
     <div className="sad-stats">
       {permissions.leads && <Stat icon={UsersRound} title="Total leads" value={number(visibleLeads.length)} sub={`${number(openLeads.length)} open`} onClick={() => navigate('/leads')} />}
       {permissions.quotations && <Stat icon={FileText} title="Total quotations" value={number(visibleQuotations.length)} sub={money(quotedValue)} tone="purple" onClick={() => navigate('/quotations')} />}
@@ -175,6 +176,12 @@ function DashboardOverview({ session }) {
       {(permissions.products || permissions.quotations) && <Card icon={Package} title="Products & demand" eyebrow="Quotation items and product master" className="sad-products"><div className="sad-mini-grid sad-mini-grid-two">{permissions.products && <MiniTile label="Catalogue products" value={number(visibleProducts.length)} tone="orange" />}{permissions.quotations && <MiniTile label="Quoted products" value={number(productDemand.size)} tone="purple" />}</div><div className="sad-list-title">Most requested</div><div className="sad-action-list">{topProducts.map(([name, qty]) => <div key={name}><span><strong>{name}</strong><small>Quoted quantity</small></span><b>{number(qty)}</b></div>)}{!topProducts.length && <p className="sad-empty">No quotation item data.</p>}</div></Card>}
     </div>
     <p className="sad-footnote">Figures reflect the selected period and accessible CRM records. Quotation values are not invoiced revenue.</p>
+    {targets?.mine && <section className="sad-target-card" aria-label="Your sales target">
+      <div className="sad-target-heading"><div><span className="sad-eyebrow">PERSONAL TARGET · ALL TIME</span><h2>Your sales target</h2><p>Only accepted quotations count towards achievement. Latest revisions only.</p></div><strong>{targets.mine.target > 0 ? `${targets.mine.achievementPercent}%` : 'Not set'}</strong></div>
+      <div className="sad-target-track" role="progressbar" aria-valuenow={Math.min(targets.mine.achievementPercent, 100)} aria-valuemin="0" aria-valuemax="100" aria-label="Sales target achieved"><i style={{ width: `${Math.min(targets.mine.achievementPercent, 100)}%` }} /></div>
+      <div className="sad-target-metrics"><div><span>Target</span><strong>{money(targets.mine.target)}</strong></div><div><span>Achieved · Accepted</span><strong>{money(targets.mine.achieved)}</strong></div><div><span>Remaining</span><strong>{money(targets.mine.remaining)}</strong></div><div><span>Quotation stages</span><strong>{number(targets.mine.stages.Draft.count)} draft · {number(targets.mine.stages.Sent.count)} sent · {number(targets.mine.stages.Accepted.count)} accepted · {number(targets.mine.stages.Rejected.count)} rejected</strong></div></div>
+    </section>}
+    {isAdministrator(session.user) && targets?.team?.length > 0 && <section className="sad-target-card sad-team-targets" aria-label="Team sales targets"><div className="sad-target-heading"><div><span className="sad-eyebrow">TEAM PERFORMANCE · ALL TIME</span><h2>User target achievement</h2><p>Accepted quotation value by the user who created the quotation.</p></div></div><div className="sad-team-list">{targets.team.map((person) => <div className="sad-team-row" key={person.userId}><strong title={person.name}>{person.name}</strong><span>{money(person.achieved)} / {money(person.target)}</span><div className="sad-team-track"><i style={{ width: `${Math.min(person.achievementPercent, 100)}%` }} /></div><b>{person.target > 0 ? `${person.achievementPercent}%` : 'No target'}</b><small>{person.stages.Accepted.count} accepted · {person.stages.Sent.count} sent · {person.stages.Draft.count} draft · {person.stages.Rejected.count} rejected</small></div>)}</div></section>}
   </div>;
 }
 

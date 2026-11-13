@@ -10,6 +10,7 @@ import LoadingButton from "../../../components/LoadingButton.jsx";
 
 function UsersPanel({ users, setUsers, token }) {
   const currentUser = getSession()?.user;
+  const isAdmin = isAdministrator(currentUser);
   const canCreate = can(currentUser, 'users.create');
   const canEdit = can(currentUser, 'users.edit');
   const canDelete = can(currentUser, 'users.delete');
@@ -38,6 +39,7 @@ function UsersPanel({ users, setUsers, token }) {
     password: "",
     role: 2,
     roleProfile: "",
+    salesTarget: "",
   });
   const selectedRole = form.role === 1 ? "system:administrator" : form.roleProfile ? `custom:${form.roleProfile}` : undefined;
   const roleChoices = roleOptions.map((role) => ({
@@ -82,7 +84,7 @@ function UsersPanel({ users, setUsers, token }) {
     api.roleOptions(token).then((response) => setRoleOptions(response.roles || [])).catch(() => setRoleOptions([]));
   }, [token]);
   function openCreate() {
-    setForm({ name: "", email: "", phone: "", password: "", role: 2, roleProfile: "" });
+    setForm({ name: "", email: "", phone: "", password: "", role: 2, roleProfile: "", salesTarget: "0" });
     setDialog({ mode: "create" });
   }
   function openEdit(user) {
@@ -93,6 +95,7 @@ function UsersPanel({ users, setUsers, token }) {
       password: "",
       role: user.role === 2 ? 2 : 1,
       roleProfile: user.roleProfile?.id || "",
+      salesTarget: String(user.salesTarget ?? 0),
     });
     setDialog({ mode: "edit", user });
   }
@@ -103,10 +106,11 @@ function UsersPanel({ users, setUsers, token }) {
     savingRef.current = true;
     setSaving(true);
     try {
+      const payload = isAdmin ? form : { ...form, salesTarget: undefined };
       const result =
         dialog.mode === "create"
-          ? await api.createUser(token, form)
-          : await api.updateUser(token, dialog.user._id, form);
+          ? await api.createUser(token, payload)
+          : await api.updateUser(token, dialog.user._id, payload);
       setUsers((current) =>
         dialog.mode === "create"
           ? [result.user, ...current]
@@ -196,6 +200,7 @@ function UsersPanel({ users, setUsers, token }) {
               <th>Email</th>
               <th>Phone</th>
               <th>Role</th>
+              {isAdmin && <th>Sales target</th>}
               <th>Joined</th>
               <th className="actions-heading">Actions</th>
             </tr>
@@ -223,6 +228,7 @@ function UsersPanel({ users, setUsers, token }) {
                       {user.roleProfile?.name || user.roleLabel}
                     </span>
                   </td>
+                  {isAdmin && <td>{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(user.salesTarget || 0)}</td>}
                   <td>{formatDisplayDate(user.createdAt)}</td>
                   <td>
                     <div className="table-actions">
@@ -250,7 +256,7 @@ function UsersPanel({ users, setUsers, token }) {
               ))
             ) : (
               <tr>
-                <td className="empty-table" colSpan="7">
+                <td className="empty-table" colSpan={isAdmin ? 8 : 7}>
                   No accounts match your search.
                 </td>
               </tr>
@@ -355,6 +361,10 @@ function UsersPanel({ users, setUsers, token }) {
                   placeholder="At least 8 characters"
                 />
               </label>
+              {isAdmin && <label className="full-field">
+                Sales target (₹, all time)
+                <input type="number" min="0" step="0.01" required value={form.salesTarget} onChange={(event) => setForm({ ...form, salesTarget: event.target.value })} placeholder="Enter target amount" />
+              </label>}
             </div>
             <div className="modal-footer">
               <button

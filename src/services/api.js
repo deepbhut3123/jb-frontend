@@ -48,6 +48,7 @@ export const api = {
   updateProfile: (token, body) => request('/api/profile', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   changePassword: (token, body) => request('/api/profile/password', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   dashboard: (token) => request('/api/dashboard/summary', { headers: { Authorization: `Bearer ${token}` } }),
+  dashboardTargets: (token) => request('/api/dashboard/targets', { headers: { Authorization: `Bearer ${token}` } }),
   reportCatalog: (token) => request('/api/reports/catalog', { headers: { Authorization: `Bearer ${token}` } }),
   reportOptions: (token, module) => request(`/api/reports/options?module=${encodeURIComponent(module)}`, { headers: { Authorization: `Bearer ${token}` } }),
   previewReport: (token, body) => request('/api/reports/preview', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
