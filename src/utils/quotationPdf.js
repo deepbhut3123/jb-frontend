@@ -8,6 +8,7 @@ import locationIconUrl from "../assets/contact-location.svg";
 import phoneIconUrl from "../assets/contact-phone.svg";
 import emailIconUrl from "../assets/contact-email.svg";
 import webIconUrl from "../assets/contact-web.svg";
+import { quotationItemUnit } from "./quotationUnit.js";
 
 const COMPANY = {
   name: "JB CORPORATION",
@@ -337,17 +338,18 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   const grandTotal = Number((taxableAmount + taxAmount).toFixed(2));
   const rows = quotationItems.map((item, index) => {
     const product = productMap.get(String(item.productId)) || {};
+    const modelCode = item.productCode || product.partCode || product.code || "";
     const description = item.description || item.productName || "Product";
     const quantity = Number(item.quantity || 0);
     const lineAmount = Number(item.lineTotal ?? (quantity * Number(item.unitPrice || 0)));
     const effectiveRate = quantity > 0 ? lineAmount / quantity : Number(item.unitPrice || 0);
     return [
       index + 1,
-      item.productCode || product.partCode || product.code || "-",
+      modelCode || "-",
       product.brand || "-",
       description,
       money(quantity).replace(/\.00$/, ""),
-      item.unit || product.unit || "Nos.",
+      quotationItemUnit(modelCode || item.productName) === "Mtr" ? "Mtr" : item.unit || product.unit || "Nos.",
       money(effectiveRate),
       money(lineAmount),
     ];

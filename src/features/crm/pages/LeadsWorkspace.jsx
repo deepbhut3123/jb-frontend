@@ -126,7 +126,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
     website: "",
     customerType: "",
     segment: "",
-    companyPersons: [],
+    companyPersons: [{ ...emptyCompanyPerson }],
     leadSource: "",
     assignedTo: "",
     stage: "New",
@@ -353,7 +353,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
       company: "",
       address1: "", address2: "", area: "", city: "", state: "",
       website: "",
-      customerType: "", segment: "", companyPersons: [], leadSource: "",
+      customerType: "", segment: "", companyPersons: [{ ...emptyCompanyPerson }], leadSource: "",
       assignedTo: currentUser.id,
       stage: "New",
       nextFollowUp: "",
@@ -361,11 +361,12 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
     setDialog({ mode: "create" });
   }
   function openEdit(lead) {
+    const companyPersons = normalizeCompanyPersons(lead.companyPersons);
     setForm({
       company: lead.company === "N/A" ? "" : lead.company,
       address1: lead.address1 || "", address2: lead.address2 || "", area: lead.area || "", city: lead.city || "", state: lead.state || "",
       website: lead.website || "",
-      customerType: lead.customerType || "", segment: lead.segment || "", companyPersons: normalizeCompanyPersons(lead.companyPersons), leadSource: lead.leadSource || lead.source || "",
+      customerType: lead.customerType || "", segment: lead.segment || "", companyPersons: companyPersons.length ? companyPersons : [{ ...emptyCompanyPerson }], leadSource: lead.leadSource || lead.source || "",
       assignedTo: lead.assignedTo,
       stage: lead.stage || lead.status || "New",
       nextFollowUp: lead.nextFollowUp ? lead.nextFollowUp.slice(0, 10) : "",
@@ -398,6 +399,7 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
   }
   async function submitLead(event) {
     event.preventDefault();
+    if (!form.companyPersons.length || form.companyPersons.some((person) => !person.number.trim())) return toast.error("Enter a phone number for each person.");
     if (leadSavingRef.current) return;
     leadSavingRef.current = true;
     setSavingLead(true);
@@ -779,8 +781,8 @@ function LeadsPanel({ leads, setLeads, isAdmin, users, token, currentUser, leadO
                 <LeadDropdown value={form.segment} options={optionsFor("segment")} placeholder="Select segment" onChange={(segment) => setForm({ ...form, segment })} showStatusIndicator={false} manageLabel="Manage segments" onManage={isAdmin ? () => setOptionDialog("segment") : undefined} />
               </label>
               <div className="full-field company-persons-field">
-                <div className="company-persons-heading"><div><strong>People</strong><small>Optional — add one or more contacts for this lead.</small></div><button className="secondary-action" type="button" onClick={() => setForm((current) => ({ ...current, companyPersons: [...current.companyPersons, { ...emptyCompanyPerson }] }))}><Plus size={14} />Add person</button></div>
-                {form.companyPersons.map((person, index) => <div className="company-person-row" key={index}><input maxLength={100} value={person.name} onChange={(event) => updateCompanyPerson(index, { name: event.target.value })} placeholder="Name (optional)" aria-label={`Person ${index + 1} name`} /><input maxLength={100} value={person.role} onChange={(event) => updateCompanyPerson(index, { role: event.target.value })} placeholder="Role (optional)" aria-label={`Person ${index + 1} role`} /><input inputMode="tel" maxLength={30} value={person.number} onChange={(event) => updateCompanyPerson(index, { number: event.target.value })} placeholder="Number (optional)" aria-label={`Person ${index + 1} number`} /><input type="email" maxLength={160} value={person.email} onChange={(event) => updateCompanyPerson(index, { email: event.target.value })} placeholder="Email (optional)" aria-label={`Person ${index + 1} email`} /><button className="icon-action delete" type="button" title="Remove person" aria-label={`Remove person ${index + 1}`} onClick={() => setForm((current) => ({ ...current, companyPersons: current.companyPersons.filter((_, personIndex) => personIndex !== index) }))}><Trash2 size={15} /></button></div>)}
+                <div className="company-persons-heading"><strong>Person details</strong></div>
+                {form.companyPersons.map((person, index) => <div className="company-person-row" key={person._id || index}><label>Name (optional)<input maxLength={100} value={person.name} onChange={(event) => updateCompanyPerson(index, { name: event.target.value })} placeholder="Person name" /></label><label>Role (optional)<input maxLength={100} value={person.role} onChange={(event) => updateCompanyPerson(index, { role: event.target.value })} placeholder="Role" /></label><label>Phone number *<input type="tel" inputMode="tel" maxLength={30} required value={person.number} onChange={(event) => updateCompanyPerson(index, { number: event.target.value })} placeholder="Phone number" /></label><label>Email (optional)<input type="email" maxLength={160} value={person.email} onChange={(event) => updateCompanyPerson(index, { email: event.target.value })} placeholder="Email address" /></label>{form.companyPersons.length > 1 && <button className="icon-action delete" type="button" title="Remove person" aria-label={`Remove person ${index + 1}`} onClick={() => setForm((current) => ({ ...current, companyPersons: current.companyPersons.filter((_, personIndex) => personIndex !== index) }))}><Trash2 size={15} /></button>}</div>)}
               </div>
               <label>
                 Lead Source
