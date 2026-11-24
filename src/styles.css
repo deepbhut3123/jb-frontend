@@ -391,6 +391,11 @@ h1 em { color: #d36517; font-style: normal; }
 @media (max-width: 700px) { .customers-page { width: 100%; } .customers-page .section-heading { align-items: flex-start; flex-direction: column; } .customers-page .section-heading .primary-action { width: 100%; justify-content: center; } }
 
 .pricing-settings-page { width: 100%; }
+.settings-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; border-bottom: 1px solid #e5e6f2; }
+.settings-tabs button { padding: 11px 17px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #676b8b; font: inherit; font-weight: 700; cursor: pointer; }
+.settings-tabs button[aria-selected="true"] { border-bottom-color: #6266d6; color: #30346e; }
+.settings-tabs button:focus-visible { outline: 2px solid #6266d6; outline-offset: -2px; border-radius: 6px; }
+.pricing-settings-card[hidden] { display: none; }
 .quotation-company-menu { max-height: 240px; overflow-y: auto; }
 .quotation-add-company { position: sticky; bottom: 0; z-index: 1; width: 100%; border-top: 1px solid #ececf5; background: #fff; }
 .pricing-settings-card { margin-top: 22px; padding: 30px; border: 1px solid rgba(99, 102, 241, .16); border-radius: 22px; background: linear-gradient(145deg, #fff, #f7f8ff); box-shadow: 0 18px 45px rgba(30, 27, 75, .09); }

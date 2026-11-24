@@ -319,8 +319,11 @@ function QuotationsPanel({ quotations, setQuotations, leads, token, products }) 
     setPendingDownloads((current) => ({ ...current, [quotation._id]: true }));
     try {
       const lead = leads.find((item) => String(item._id) === String(quotation.leadId)) || quotation.leadAddress;
-      const { downloadQuotationPdf } = await import("../../../utils/quotationPdf.js");
-      await downloadQuotationPdf({ quotation, lead, products });
+      const [{ downloadQuotationPdf }, { settings: bankDetails }] = await Promise.all([
+        import("../../../utils/quotationPdf.js"),
+        api.bankSettings(token),
+      ]);
+      await downloadQuotationPdf({ quotation, lead, products, bankDetails });
       toast.success("Quotation PDF downloaded.");
     } catch (error) {
       toast.error(error.message || "Could not create the quotation PDF.");

@@ -25,6 +25,8 @@ export const api = {
   globalSearch: (token, query) => request(`/api/search?q=${encodeURIComponent(query)}`, { headers: { Authorization: `Bearer ${token}` } }),
   pricingSettings: (token) => request('/api/pricing-settings', { headers: { Authorization: `Bearer ${token}` } }),
   savePricingSettings: (token, body) => request('/api/pricing-settings', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
+  bankSettings: (token) => request('/api/bank-settings', { headers: { Authorization: `Bearer ${token}` } }),
+  saveBankSettings: (token, body) => request('/api/bank-settings', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   smtpSettings: (token) => request('/api/smtp-settings', { headers: { Authorization: `Bearer ${token}` } }),
   saveSmtpSettings: (token, body) => request('/api/smtp-settings', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }),
   clearSmtpSettings: (token) => request('/api/smtp-settings', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }),

@@ -17,11 +17,6 @@ const COMPANY = {
   phone: "+91 9265581679",
   email: "jbcorporation2023@gmail.com",
   website: "www.jbcorporation.co.in",
-  bankName: "The Kalupur Commercial Co-op Bank Ltd",
-  accountNumber: "03920101971",
-  ifsc: "KCCB0KTW039",
-  branch: "Kathwada, Ahmedabad",
-  upiId: "jbcorporation2023@okaxis",
 };
 
 const BLUE = [9, 67, 135];
@@ -226,7 +221,8 @@ function addPageFooter(doc, contactIcons, quotation) {
   }
 }
 
-export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
+export async function downloadQuotationPdf({ quotation, lead, products = [], bankDetails }) {
+  if (!bankDetails) throw new Error('Bank details could not be loaded. Please try again.');
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   doc.setProperties({ title: `Quotation ${quotationNumber(quotation)}`, subject: `Quotation for ${quotation.company || "company"}`, author: COMPANY.name });
   const svgAssets = await Promise.all([
@@ -468,24 +464,30 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   doc.text("Amount in Words:", 125, wordsY);
   doc.text(`Rupees ${numberToWords(grandTotal)} Only.`, 125, wordsY + 5, { maxWidth: 71, lineHeightFactor: 1.15 });
 
+  const bankRows = [["Account Name", bankDetails.accountName], ["Bank Name", bankDetails.bankName], ["Account Number", bankDetails.accountNumber], ["IFSC Code", bankDetails.ifsc], ["Branch", bankDetails.branch], ["UPI ID", bankDetails.upiId]];
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  const wrappedBankRows = bankRows.map(([label, value]) => ({ label, lines: doc.splitTextToSize(`:   ${value}`, 65) }));
+  const bankRowHeights = wrappedBankRows.map(({ lines }) => Math.max(4.4, lines.length * 3.3 + 0.8));
+  const bankBoxHeight = Math.max(38, 9 + bankRowHeights.reduce((total, height) => total + height, 0));
   const lowerY = Math.max(termsBottom, wordsBoxY + wordsBoxHeight) + 6;
-  if (lowerY > 226) { doc.addPage(); y = 14; } else y = lowerY;
+  if (lowerY > 266 - bankBoxHeight) { doc.addPage(); y = 14; } else y = lowerY;
   doc.setDrawColor(195, 213, 228);
   doc.setLineWidth(0.25);
-  doc.roundedRect(10, y, 108, 38, 1.2, 1.2, "S");
+  doc.roundedRect(10, y, 108, bankBoxHeight, 1.2, 1.2, "S");
   doc.roundedRect(122, y, 78, 38, 1.2, 1.2, "S");
   sectionTitle(doc, "Bank Details", 10, y, 108, BLUE);
   sectionTitle(doc, "Scan to Pay", 122, y, 78, BLUE);
   doc.setTextColor(...TEXT);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  const bankRows = [["Account Name", COMPANY.name], ["Bank Name", COMPANY.bankName], ["Account Number", COMPANY.accountNumber], ["IFSC Code", COMPANY.ifsc], ["Branch", COMPANY.branch], ["UPI ID", COMPANY.upiId]];
-  bankRows.forEach(([label, value], index) => {
-    doc.setFont("helvetica", "bold"); doc.text(label, 14, y + 11.5 + index * 4.4);
-    doc.setFont("helvetica", "normal"); doc.text(`:   ${value}`, 48, y + 11.5 + index * 4.4);
+  doc.setFontSize(7.5);
+  let bankRowY = y + 11.5;
+  wrappedBankRows.forEach(({ label, lines }, index) => {
+    doc.setFont("helvetica", "bold"); doc.text(label, 14, bankRowY);
+    doc.setFont("helvetica", "normal"); doc.text(lines, 48, bankRowY, { lineHeightFactor: 1.15 });
+    bankRowY += bankRowHeights[index];
   });
   try {
-    const upi = `upi://pay?pa=${encodeURIComponent(COMPANY.upiId)}&pn=${encodeURIComponent(COMPANY.name)}&am=${grandTotal.toFixed(2)}&cu=INR`;
+    const upi = `upi://pay?pa=${encodeURIComponent(bankDetails.upiId)}&pn=${encodeURIComponent(bankDetails.accountName)}&am=${grandTotal.toFixed(2)}&cu=INR`;
     doc.addImage(await QRCode.toDataURL(upi, { width: 280, margin: 1, errorCorrectionLevel: "M" }), "PNG", 127, y + 8.5, 26, 26, undefined, "FAST");
   } catch { /* Payment information remains available even if QR rendering is unavailable. */ }
   doc.setDrawColor(184, 196, 208);
@@ -499,9 +501,9 @@ export async function downloadQuotationPdf({ quotation, lead, products = [] }) {
   doc.setTextColor(...BLUE);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
-  doc.text(`UPI ID: ${COMPANY.upiId}`, 178.5, y + 27, { align: "center", maxWidth: 39 });
+  doc.text(`UPI ID: ${bankDetails.upiId}`, 178.5, y + 27, { align: "center", maxWidth: 39 });
 
-  const signatureY = y + 42;
+  const signatureY = y + bankBoxHeight + 4;
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...BLUE);
   doc.setFontSize(7.5);

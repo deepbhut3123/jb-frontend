@@ -1,4 +1,4 @@
-import { Mail, Save, Send, Settings } from 'lucide-react';
+import { Landmark, Mail, Save, Send, Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { api, getSession } from '../../../services/api.js';
@@ -6,6 +6,7 @@ import { can } from '../../../utils/permissions.js';
 
 const pricingDefaults = { dollarRate: 1, multiplier: 1 };
 const smtpDefaults = { host: '', port: 587, secure: false, username: '', from: '', password: '' };
+const bankDefaults = { accountName: '', bankName: '', accountNumber: '', ifsc: '', branch: '', upiId: '' };
 
 export default function PricingSettingsWorkspace({ token }) {
   const canEdit = can(getSession()?.user, 'settings.edit');
@@ -18,6 +19,9 @@ export default function PricingSettingsWorkspace({ token }) {
   const [savingSmtp, setSavingSmtp] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [testEmail, setTestEmail] = useState(getSession()?.user?.email || '');
+  const [activeTab, setActiveTab] = useState('conversion');
+  const [bank, setBank] = useState(bankDefaults);
+  const [savingBank, setSavingBank] = useState(false);
 
   useEffect(() => {
     api.pricingSettings(token).then((response) => setPricing(response.settings || pricingDefaults)).catch((error) => toast.error(error.message));
@@ -26,6 +30,7 @@ export default function PricingSettingsWorkspace({ token }) {
       setSmtpSource(response.source || 'environment');
       setSmtpPasswordConfigured(Boolean(response.settings?.passwordConfigured));
     }).catch((error) => toast.error(error.message));
+    api.bankSettings(token).then((response) => setBank({ ...bankDefaults, ...response.settings })).catch((error) => toast.error(error.message));
   }, [token]);
 
   async function savePricing(event) {
@@ -62,10 +67,38 @@ export default function PricingSettingsWorkspace({ token }) {
     finally { setTestingSmtp(false); }
   }
 
-  return <div className="crm-content-inner pricing-settings-page">
-    <div className="section-heading"><div><span className="dashboard-kicker"><Settings size={15} /> Administration</span><h1>Settings</h1><p>Manage product pricing and outgoing email configuration.</p></div></div>
+  async function saveBank(event) {
+    event.preventDefault();
+    if (!canEdit || savingBank) return;
+    setSavingBank(true);
+    try {
+      const response = await api.saveBankSettings(token, bank);
+      setBank({ ...bankDefaults, ...response.settings });
+      toast.success('Bank details saved. New quotation PDFs will use these details.');
+    } catch (error) { toast.error(error.message); }
+    finally { setSavingBank(false); }
+  }
 
-    <form className="pricing-settings-card" onSubmit={savePricing}>
+  return <div className="crm-content-inner pricing-settings-page">
+    <div className="section-heading"><div><span className="dashboard-kicker"><Settings size={15} /> Administration</span><h1>Settings</h1><p>Manage conversion rates, outgoing email, and quotation payment details.</p></div></div>
+
+    <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+      {[
+        ['conversion', 'Conversion rate'],
+        ['smtp', 'SMTP'],
+        ['bank', 'Bank details'],
+      ].map(([id, label]) => <button key={id} id={`settings-tab-${id}`} type="button" role="tab" aria-selected={activeTab === id} aria-controls={`settings-panel-${id}`} tabIndex={activeTab === id ? 0 : -1} onClick={() => setActiveTab(id)} onKeyDown={(event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const tabs = ['conversion', 'smtp', 'bank'];
+        const index = tabs.indexOf(activeTab);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + (event.key === 'ArrowRight' ? 1 : 2)) % 3;
+        setActiveTab(tabs[next]);
+        document.getElementById(`settings-tab-${tabs[next]}`)?.focus();
+      }}>{label}</button>)}
+    </div>
+
+    <form id="settings-panel-conversion" role="tabpanel" aria-labelledby="settings-tab-conversion" hidden={activeTab !== 'conversion'} className="pricing-settings-card" onSubmit={savePricing}>
       <div className="pricing-settings-header"><div><h2>Conversion rules</h2><p>These values apply to every product. Margin is configured separately on each product.</p></div><Settings size={30} aria-hidden="true" /></div>
       <div className="pricing-settings-grid">
         <label><span>Dollar rate</span><small>Indian rupees per US dollar</small><div className="pricing-input"><span>INR</span><input required readOnly={!canEdit} min="0.0001" step="any" inputMode="decimal" type="number" value={pricing.dollarRate} onChange={(event) => setPricing({ ...pricing, dollarRate: event.target.value })} /></div></label>
@@ -75,7 +108,7 @@ export default function PricingSettingsWorkspace({ token }) {
       {canEdit && <div className="pricing-settings-actions"><button className="primary-action" disabled={savingPricing} type="submit"><Save size={16} />{savingPricing ? 'Saving...' : 'Save settings'}</button></div>}
     </form>
 
-    <form className="pricing-settings-card smtp-settings-card" onSubmit={saveSmtp}>
+    <form id="settings-panel-smtp" role="tabpanel" aria-labelledby="settings-tab-smtp" hidden={activeTab !== 'smtp'} className="pricing-settings-card smtp-settings-card" onSubmit={saveSmtp}>
       <div className="pricing-settings-header"><div><h2>SMTP email settings</h2><p>Configure the email server used for account verification and password recovery.</p></div><Mail size={30} aria-hidden="true" /></div>
       <div className="smtp-source-note">Currently using <strong>{smtpSource === 'settings' ? 'saved settings' : 'environment variables'}</strong>. Saved settings take priority; SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, and SMTP_FROM are used as the fallback.</div>
       <div className="pricing-settings-grid smtp-settings-grid">
@@ -88,6 +121,21 @@ export default function PricingSettingsWorkspace({ token }) {
       </div>
       {canEdit && <div className="pricing-settings-actions smtp-settings-actions"><button className="primary-action" disabled={savingSmtp} type="submit"><Save size={16} />{savingSmtp ? 'Saving...' : 'Save SMTP settings'}</button></div>}
       <div className="smtp-test-panel"><div className="smtp-test-heading"><div><h3>Send a test email</h3><p>Save settings first, then confirm the server can deliver messages.</p></div><Send size={20} aria-hidden="true" /></div><div className="smtp-test-row"><label><span>Test recipient email</span><input required type="email" value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder="you@example.com" /></label><button className="primary-action" type="button" disabled={!canEdit || testingSmtp || !testEmail} onClick={sendTestEmail}><Send size={16} />{testingSmtp ? 'Sending...' : 'Send test email'}</button></div></div>
+    </form>
+
+    <form id="settings-panel-bank" role="tabpanel" aria-labelledby="settings-tab-bank" hidden={activeTab !== 'bank'} className="pricing-settings-card" onSubmit={saveBank}>
+      <div className="pricing-settings-header"><div><h2>Bank details</h2><p>These details and the UPI payment QR code appear on newly downloaded quotation PDFs.</p></div><Landmark size={30} aria-hidden="true" /></div>
+      <div className="pricing-settings-grid smtp-settings-grid">
+        {[
+          ['accountName', 'Account name', 'Name on the bank account'],
+          ['bankName', 'Bank name', 'Bank name'],
+          ['accountNumber', 'Account number', 'Bank account number'],
+          ['ifsc', 'IFSC code', '11-character IFSC code'],
+          ['branch', 'Branch', 'Bank branch'],
+          ['upiId', 'UPI ID', 'name@bank'],
+        ].map(([field, label, placeholder]) => <label key={field}><span>{label}</span><input required readOnly={!canEdit} maxLength={field === 'accountNumber' ? 50 : field === 'ifsc' ? 20 : 100} value={bank[field] || ''} onChange={(event) => setBank({ ...bank, [field]: event.target.value })} placeholder={placeholder} /></label>)}
+      </div>
+      {canEdit && <div className="pricing-settings-actions"><button className="primary-action" disabled={savingBank} type="submit"><Save size={16} />{savingBank ? 'Saving...' : 'Save bank details'}</button></div>}
     </form>
   </div>;
 }
